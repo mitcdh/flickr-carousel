@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="It's called a Carousel... It takes us to a place where we ache to go again." />
+    <meta name="author" content="Mitchell Hewes" />
+    <title>carousel.mitcdh</title>
+    <link rel="icon" type="image/png" href="favicon-96x96.png" sizes="96x96" />
+    <link rel="icon" type="image/svg+xml" href="favicon.svg" />
+    <link rel="shortcut icon" href="favicon.ico" />
+    <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png" />
+    <meta name="apple-mobile-web-app-title" content="mitcdh" />
+    <link rel="manifest" href="site.webmanifest" />
+    <meta name="theme-color" content="#000000">
+    <link rel="stylesheet" href="css/carousel.css" />
+    <link
+      rel="preload"
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Atkinson+Hyperlegible+Next:wght@400;500;600;700&display=swap"
+      as="style"
+    />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Atkinson+Hyperlegible+Next:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+  </head>
+  <body>
+    <div id="wallpaper-container">
+      <div id="loading-indicator">
+        <img
+          src="logo.svg"
+          width="64"
+          height="64"
+          alt="Loading..."
+        />
+      </div>
+      <button id="fullscreen-btn" aria-label="Toggle fullscreen">⛶</button>
+      <button id="fit-mode-btn" aria-label="Toggle fit mode">↔</button>
+      <img id="wallpaper" src="" alt="Wallpaper Image" />
+      <div id="image-info">
+        <h3 id="image-title"></h3>
+        <p id="image-location"></p>
+        <p id="image-photographer"></p>
+        <p id="image-description"></p>
+        <a id="flickr-link" href="#" target="_blank">View photo on Flickr ↗</a>
+      </div>
+    </div>
+    <script src="js/carousel.js"></script>
+  </body>
+</html>

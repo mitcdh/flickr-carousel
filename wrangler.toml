@@ -1,0 +1,12 @@
+name = "flickr-carousel"
+main = "./worker/index.js"
+compatibility_date = "2025-04-02"
+
+[assets]
+directory = "./public"
+not_found_handling = "404-page"
+
+[vars]
+FLICKR_EXTRAS = "geo,owner_name,url_o,url_6k,url_5k,url_4k,url_3k,url_k,url_h,url_b,description"
+FLICKR_PHOTOSET_ID = "72177720319053395"
+FLICKR_USER_ID = "83515912@N03"
