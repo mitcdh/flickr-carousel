@@ -17,14 +17,14 @@
   const UI = {
     elements: {
       loadingIndicator: document.getElementById("loading-indicator"),
-      wallpaperImg: document.getElementById("wallpaper"),
+      slideImg: document.getElementById("slide"),
       imageTitle: document.getElementById("image-title"),
       imageLocation: document.getElementById("image-location"),
       imagePhotographer: document.getElementById("image-photographer"),
       imageInfo: document.getElementById("image-info"),
       imageDescription: document.getElementById("image-description"),
       flickrLink: document.getElementById("flickr-link"),
-      wallpaperContainer: document.getElementById("wallpaper-container"),
+      slideContainer: document.getElementById("slide-container"),
       fullscreenBtn: document.getElementById("fullscreen-btn"),
       fitModeBtn: document.getElementById("fit-mode-btn"),
     },
@@ -40,17 +40,17 @@
     },
 
     fadeOut() {
-      this.elements.wallpaperImg.style.opacity = 0;
+      this.elements.slideImg.style.opacity = 0;
       this.elements.imageInfo.style.opacity = 0;
     },
 
     fadeIn() {
-      this.elements.wallpaperImg.style.opacity = 1;
+      this.elements.slideImg.style.opacity = 1;
       this.elements.imageInfo.style.opacity = 1;
     },
 
     updatePhoto(photo, imgUrl, infoExpanded) {
-      this.elements.wallpaperImg.src = imgUrl;
+      this.elements.slideImg.src = imgUrl;
       this.elements.imageTitle.textContent = photo.title || "Untitled";
 
       const photoUrl = `https://www.flickr.com/photos/${Config.userId}/${photo.id}`;
@@ -342,13 +342,13 @@
 
   const FitModeHandler = {
     toggle() {
-      const isCurrentlyWidthPriority = UI.elements.wallpaperImg.classList.contains('width-priority');
+      const isCurrentlyWidthPriority = UI.elements.slideImg.classList.contains('width-priority');
 
       if (isCurrentlyWidthPriority) {
-        UI.elements.wallpaperImg.classList.remove('width-priority');
+        UI.elements.slideImg.classList.remove('width-priority');
         console.log('Image: fit mode changed to \'height priority\'');
       } else {
-        UI.elements.wallpaperImg.classList.add('width-priority');
+        UI.elements.slideImg.classList.add('width-priority');
         console.log('Image: fit mode changed to \'width priority\'');
       }
     }
@@ -425,12 +425,12 @@
       );
 
       // Add touch event listeners for swipe
-      UI.elements.wallpaperContainer.addEventListener(
+      UI.elements.slideContainer.addEventListener(
         "touchstart",
         (e) => SwipeHandler.handleTouchStart(e),
         { passive: false }
       );
-      UI.elements.wallpaperContainer.addEventListener(
+      UI.elements.slideContainer.addEventListener(
         "touchend",
         (e) => SwipeHandler.handleTouchEnd(e),
         { passive: false }
@@ -443,7 +443,7 @@
       window.addEventListener("resize", this.handleResize);
 
       // Add error handling for image loading
-      UI.elements.wallpaperImg.addEventListener("error", this.handleImageError);
+      UI.elements.slideImg.addEventListener("error", this.handleImageError);
     },
 
     handleKeyPress(event) {
@@ -497,9 +497,9 @@
       const currentPhoto = ImageHandler.photos[ImageHandler.currentPhotoIndex];
       const newBestUrl = ImageHandler.getBestImageUrl(currentPhoto);
 
-      if (newBestUrl && newBestUrl !== UI.elements.wallpaperImg.src) {
+      if (newBestUrl && newBestUrl !== UI.elements.slideImg.src) {
         console.log("Window: resized, updating image resolution");
-        UI.elements.wallpaperImg.src = newBestUrl;
+        UI.elements.slideImg.src = newBestUrl;
       }
 
       // Clear preloaded images cache
