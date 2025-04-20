@@ -35,18 +35,36 @@
 
     hideLoading() {
       this.elements.loadingIndicator.style.display = "none";
-      this.elements.fullscreenBtn.style.opacity = 1;
-      this.elements.fitModeBtn.style.opacity = 1;
+      if (!URLParamsHandler.params.hideInfo) {
+        this.elements.fullscreenBtn.style.opacity = 1;
+        this.elements.fitModeBtn.style.opacity = 1;
+      }
     },
 
     fadeOut() {
-      this.elements.slideImg.style.opacity = 0;
-      this.elements.imageInfo.style.opacity = 0;
+      // Skip animation if transitions are disabled
+      if (URLParamsHandler.params.disableTransitions) {
+        this.elements.slideImg.style.opacity = 0;
+        this.elements.imageInfo.style.opacity = 0;
+      } else {
+        this.elements.slideImg.style.opacity = 0;
+        this.elements.imageInfo.style.opacity = 0;
+      }
     },
 
     fadeIn() {
-      this.elements.slideImg.style.opacity = 1;
-      this.elements.imageInfo.style.opacity = 1;
+      // Skip animation if transitions are disabled
+      if (URLParamsHandler.params.disableTransitions) {
+        this.elements.slideImg.style.opacity = 1;
+        if (!URLParamsHandler.params.hideInfo) {
+          this.elements.imageInfo.style.opacity = 1;
+        }
+      } else {
+        this.elements.slideImg.style.opacity = 1;
+        if (!URLParamsHandler.params.hideInfo) {
+          this.elements.imageInfo.style.opacity = 1;
+        }
+      }
     },
 
     updatePhoto(photo, imgUrl, infoExpanded) {
@@ -62,11 +80,12 @@
       } else {
         this.elements.imageDescription.textContent = "No description available";
       }
-      this.elements.imageDescription.style.display = infoExpanded
-        ? "block"
-        : "none";
 
-      // Update location
+      // Only show description if info is expanded and not hidden by URL parameter
+      this.elements.imageDescription.style.display =
+        infoExpanded && !URLParamsHandler.params.hideInfo ? "block" : "none";
+
+      // Update location (respect hideInfo parameter)
       if (
         photo.latitude &&
         photo.longitude &&
@@ -75,19 +94,33 @@
       ) {
         this.elements.imageLocation.textContent = `Location: ${photo.latitude}, ${photo.longitude}`;
         this.elements.imageLocation.style.display =
-          Config.showLocation && infoExpanded ? "block" : "none";
+          Config.showLocation &&
+          infoExpanded &&
+          !URLParamsHandler.params.hideInfo
+            ? "block"
+            : "none";
       } else {
         this.elements.imageLocation.style.display = "none";
       }
 
-      // Update photographer
-      this.elements.imagePhotographer.textContent = `Photographer: ${photo.ownername || "Unknown"
-        }`;
+      // Update photographer (respect hideInfo parameter)
+      this.elements.imagePhotographer.textContent = `Photographer: ${
+        photo.ownername || "Unknown"
+      }`;
       this.elements.imagePhotographer.style.display =
-        Config.showPhotographer && infoExpanded ? "block" : "none";
+        Config.showPhotographer &&
+        infoExpanded &&
+        !URLParamsHandler.params.hideInfo
+          ? "block"
+          : "none";
     },
 
     toggleInfoExpanded(isExpanded) {
+      // Skip if hideInfo parameter is set
+      if (URLParamsHandler.params.hideInfo) {
+        return;
+      }
+
       this.elements.imageDescription.style.display = isExpanded
         ? "block"
         : "none";
@@ -208,9 +241,16 @@
 
     // Toggle display of additional info
     toggleInfoDetails(event) {
+      // Skip if hideInfo parameter is set
+      if (URLParamsHandler.params.hideInfo) {
+        console.log("UI: Info display hidden by URL parameter, toggle ignored");
+        return;
+      }
+
       if (event.target === UI.elements.flickrLink) {
         return; // Don't toggle if clicking on the Flickr link
       }
+
       this.infoExpanded = !this.infoExpanded;
       UI.toggleInfoExpanded(this.infoExpanded);
     },
@@ -225,9 +265,7 @@
         return imageUrl !== null;
       });
 
-      console.log(
-        `Image: ${this.photos.length} images loaded`
-      );
+      console.log(`Image: ${this.photos.length} images loaded`);
 
       if (Config.randomOrder) {
         this.photos = this.shuffleArray(this.photos);
@@ -251,9 +289,7 @@
 
       // This check should never be triggered due to our filtering, but just in case
       if (!imgUrl) {
-        console.error(
-          `Image: No suitable image URL found index ${index}`
-        );
+        console.error(`Image: No suitable image URL found index ${index}`);
         // Skip to next photo
         ImageHandler.currentPhotoIndex =
           (ImageHandler.currentPhotoIndex + 1) % ImageHandler.photos.length;
@@ -270,10 +306,15 @@
       const nextIndex = (index + 1) % ImageHandler.photos.length;
       ImageHandler.preloadImage(nextIndex);
 
+      // Apply no transition if specified in URL
+      const transitionDelay = URLParamsHandler.params.disableTransitions
+        ? 0
+        : this.transitionDelay;
+
       setTimeout(() => {
         UI.updatePhoto(photo, imgUrl, ImageHandler.infoExpanded);
         UI.fadeIn();
-      }, this.transitionDelay);
+      }, transitionDelay);
     },
 
     // Start the carousel
@@ -312,6 +353,14 @@
   // Fullscreen functionality
   const FullscreenHandler = {
     toggle() {
+      // Skip if hideInfo parameter is set
+      if (URLParamsHandler.params.hideInfo) {
+        console.log(
+          "UI: Buttons hidden by URL parameter, fullscreen toggle ignored"
+        );
+        return;
+      }
+
       const container = document.documentElement;
 
       if (!document.fullscreenElement) {
@@ -342,18 +391,18 @@
 
   const FitModeHandler = {
     toggle() {
-      const isCurrentlyWidthPriority = UI.elements.slideImg.classList.contains('width-priority');
+      const isCurrentlyWidthPriority =
+        UI.elements.slideImg.classList.contains("width-priority");
 
       if (isCurrentlyWidthPriority) {
-        UI.elements.slideImg.classList.remove('width-priority');
-        console.log('Image: fit mode changed to \'height priority\'');
+        UI.elements.slideImg.classList.remove("width-priority");
+        console.log("Image: fit mode changed to 'height priority'");
       } else {
-        UI.elements.slideImg.classList.add('width-priority');
-        console.log('Image: fit mode changed to \'width priority\'');
+        UI.elements.slideImg.classList.add("width-priority");
+        console.log("Image: fit mode changed to 'width priority'");
       }
-    }
+    },
   };
-
 
   // Swipe handling functionality
   const SwipeHandler = {
@@ -400,29 +449,87 @@
       // Reset values
       this.touchStartX = null;
       this.touchStartY = null;
-    }
+    },
+  };
+
+  // URL Parameters handling module
+  const URLParamsHandler = {
+    params: {},
+
+    init() {
+      // Parse URL parameters
+      const queryString = window.location.search;
+      const urlParams = new URLSearchParams(queryString);
+
+      // Store parameters (present if the parameter exists in URL)
+      this.params.hideInfo = urlParams.has("hideInfo");
+      this.params.disableTransitions = urlParams.has("disableTransitions");
+      this.params.fillImage = urlParams.has("fillImage");
+
+      console.log("URL Parameters:", this.params);
+
+      // Apply parameters effects
+      this.applyParams();
+    },
+
+    applyParams() {
+      // Hide info display and buttons if hideInfo parameter is present
+      if (this.params.hideInfo) {
+        if (UI.elements.imageInfo) {
+          UI.elements.imageInfo.style.display = "none";
+        }
+
+        if (UI.elements.fullscreenBtn) {
+          UI.elements.fullscreenBtn.style.display = "none";
+        }
+
+        if (UI.elements.fitModeBtn) {
+          UI.elements.fitModeBtn.style.display = "none";
+        }
+      }
+
+      // Disable transitions if disableTransitions parameter is present
+      if (this.params.disableTransitions) {
+        if (UI.elements.slideImg) {
+          UI.elements.slideImg.style.transition = "none";
+        }
+
+        if (UI.elements.imageInfo) {
+          UI.elements.imageInfo.style.transition = "none";
+        }
+      }
+
+      // Add width priority class if fillImage parameter is present
+      if (this.params.fillImage) {
+        if (UI.elements.slideImg) {
+          UI.elements.slideImg.classList.add("width-priority");
+        }
+      }
+    },
   };
 
   // Event handlers
   const EventHandlers = {
     setupEventListeners() {
-      UI.elements.fullscreenBtn.addEventListener(
-        "click",
-        FullscreenHandler.toggle
-      );
-      UI.elements.fitModeBtn.addEventListener(
-        "click",
-        () => FitModeHandler.toggle()
-      );
-      UI.elements.imageInfo.addEventListener("click", (e) =>
-        ImageHandler.toggleInfoDetails(e)
-      );
-      UI.elements.imageInfo.addEventListener("mouseenter", () =>
-        Carousel.pause()
-      );
-      UI.elements.imageInfo.addEventListener("mouseleave", () =>
-        Carousel.resume()
-      );
+      // Only add event listeners for buttons if they're not hidden by URL parameter
+      if (!URLParamsHandler.params.hideInfo) {
+        UI.elements.fullscreenBtn.addEventListener(
+          "click",
+          FullscreenHandler.toggle
+        );
+        UI.elements.fitModeBtn.addEventListener("click", () =>
+          FitModeHandler.toggle()
+        );
+        UI.elements.imageInfo.addEventListener("click", (e) =>
+          ImageHandler.toggleInfoDetails(e)
+        );
+        UI.elements.imageInfo.addEventListener("mouseenter", () =>
+          Carousel.pause()
+        );
+        UI.elements.imageInfo.addEventListener("mouseleave", () =>
+          Carousel.resume()
+        );
+      }
 
       // Add touch event listeners for swipe
       UI.elements.slideContainer.addEventListener(
@@ -447,6 +554,11 @@
     },
 
     handleKeyPress(event) {
+      // Skip key handling for buttons if they're hidden by URL parameter
+      if (URLParamsHandler.params.hideInfo && event.key === "i") {
+        return;
+      }
+
       switch (event.key) {
         case "ArrowRight":
         case "n":
@@ -498,7 +610,7 @@
       const newBestUrl = ImageHandler.getBestImageUrl(currentPhoto);
 
       if (newBestUrl && newBestUrl !== UI.elements.slideImg.src) {
-        console.log("Window: resized, updating image resolution");
+        console.log("UI: resized, updating image resolution");
         UI.elements.slideImg.src = newBestUrl;
       }
 
@@ -525,6 +637,9 @@
   // App initialization
   async function init() {
     UI.showLoading();
+
+    // Initialize URL parameters first
+    URLParamsHandler.init();
 
     try {
       const hasPhotos = await ImageHandler.initializePhotos();
