@@ -1,187 +1,225 @@
 (function () {
-  // Configuration module
   const Config = {
     interval: 10000,
     randomOrder: true,
     showPhotographer: true,
     showLocation: true,
-    flickrApiUrl: "/flickr-api-proxy/", // Assumes CF worker but can be replaced with a full flickr api url.
+    userId: "83515912@N03",
+    flickrApiUrl: "/flickr-api-proxy/",
 
-    // Allow runtime configuration updates
     update(newConfig) {
       Object.assign(this, newConfig);
+      document.documentElement.style.setProperty(
+        "--progress-duration",
+        `${this.interval}ms`
+      );
     },
   };
 
-  // UI module to handle DOM interactions
+  const wait = (duration) =>
+    new Promise((resolve) => window.setTimeout(resolve, duration));
+
   const UI = {
     elements: {
       loadingIndicator: document.getElementById("loading-indicator"),
       slideImg: document.getElementById("slide"),
+      nextSlideImg: document.getElementById("slide-next"),
+      slideStage: document.getElementById("slide-stage"),
+      slideContainer: document.getElementById("slide-container"),
+      imageInfo: document.getElementById("image-info"),
+      imageDetails: document.getElementById("image-details"),
       imageTitle: document.getElementById("image-title"),
       imageLocation: document.getElementById("image-location"),
       imagePhotographer: document.getElementById("image-photographer"),
-      imageInfo: document.getElementById("image-info"),
       imageDescription: document.getElementById("image-description"),
       flickrLink: document.getElementById("flickr-link"),
-      slideContainer: document.getElementById("slide-container"),
+      currentSlide: document.getElementById("current-slide"),
+      totalSlides: document.getElementById("total-slides"),
+      progressFill: document.getElementById("progress-fill"),
+      carouselControls: document.getElementById("carousel-controls"),
+      previousBtn: document.getElementById("previous-btn"),
+      nextBtn: document.getElementById("next-btn"),
+      pauseBtn: document.getElementById("pause-btn"),
       fullscreenBtn: document.getElementById("fullscreen-btn"),
       fitModeBtn: document.getElementById("fit-mode-btn"),
+      slideAnnouncer: document.getElementById("slide-announcer"),
     },
 
     showLoading() {
-      this.elements.loadingIndicator.style.display = "block";
+      this.elements.loadingIndicator.style.display = "grid";
     },
 
     hideLoading() {
       this.elements.loadingIndicator.style.display = "none";
       if (!URLParamsHandler.params.hideInfo) {
-        this.elements.fullscreenBtn.style.opacity = 1;
-        this.elements.fitModeBtn.style.opacity = 1;
+        this.elements.imageInfo.style.opacity = "1";
       }
+      IdleUIHandler.wake();
     },
 
-    fadeOut() {
-      // Skip animation if transitions are disabled
-      if (URLParamsHandler.params.disableTransitions) {
-        this.elements.slideImg.style.opacity = 0;
-        this.elements.imageInfo.style.opacity = 0;
-      } else {
-        this.elements.slideImg.style.opacity = 0;
-        this.elements.imageInfo.style.opacity = 0;
-      }
+    showError(message) {
+      const label = this.elements.loadingIndicator.querySelector("span");
+      const icon = this.elements.loadingIndicator.querySelector("img");
+
+      if (icon) icon.style.display = "none";
+      if (label) label.textContent = message;
+      this.elements.loadingIndicator.style.display = "grid";
     },
 
-    fadeIn() {
-      // Skip animation if transitions are disabled
-      if (URLParamsHandler.params.disableTransitions) {
-        this.elements.slideImg.style.opacity = 1;
-        if (!URLParamsHandler.params.hideInfo) {
-          this.elements.imageInfo.style.opacity = 1;
-        }
-      } else {
-        this.elements.slideImg.style.opacity = 1;
-        if (!URLParamsHandler.params.hideInfo) {
-          this.elements.imageInfo.style.opacity = 1;
-        }
-      }
+    getTransitionDuration() {
+      const value = window
+        .getComputedStyle(document.documentElement)
+        .getPropertyValue("--transition-duration")
+        .trim();
+      const amount = Number.parseFloat(value) || 0;
+
+      return value.endsWith("ms") ? amount : amount * 1000;
     },
 
-    updatePhoto(photo, imgUrl, infoExpanded) {
-      this.elements.slideImg.src = imgUrl;
-      this.elements.imageTitle.textContent = photo.title || "Untitled";
+    setTransitionState(isTransitioning, direction = 1) {
+      this.elements.slideContainer.classList.toggle(
+        "is-transitioning",
+        isTransitioning
+      );
+      this.elements.slideContainer.classList.toggle(
+        "is-forward",
+        isTransitioning && direction >= 0
+      );
+      this.elements.slideContainer.classList.toggle(
+        "is-backward",
+        isTransitioning && direction < 0
+      );
+    },
 
-      const photoUrl = `https://www.flickr.com/photos/${Config.userId}/${photo.id}`;
-      this.elements.flickrLink.href = photoUrl;
-
-      // Update description
-      if (photo.description && photo.description._content) {
-        this.elements.imageDescription.textContent = photo.description._content;
-      } else {
-        this.elements.imageDescription.textContent = "No description available";
-      }
-
-      // Only show description if info is expanded and not hidden by URL parameter
-      this.elements.imageDescription.style.display =
-        infoExpanded && !URLParamsHandler.params.hideInfo ? "block" : "none";
-
-      // Update location (respect hideInfo parameter)
-      if (
+    updatePhotoInfo(photo, index, total) {
+      const title =
+        typeof photo.title === "string"
+          ? photo.title
+          : photo.title?._content || "Untitled";
+      const ownerId = photo.owner || Config.userId;
+      const photoUrl = `https://www.flickr.com/photos/${ownerId}/${photo.id}`;
+      const description = photo.description?._content?.trim() || "";
+      const hasLocation =
         photo.latitude &&
         photo.longitude &&
         photo.latitude !== "0" &&
-        photo.longitude !== "0"
-      ) {
-        this.elements.imageLocation.textContent = `Location: ${photo.latitude}, ${photo.longitude}`;
-        this.elements.imageLocation.style.display =
-          Config.showLocation &&
-          infoExpanded &&
-          !URLParamsHandler.params.hideInfo
-            ? "block"
-            : "none";
-      } else {
-        this.elements.imageLocation.style.display = "none";
-      }
+        photo.longitude !== "0";
 
-      // Update photographer (respect hideInfo parameter)
-      this.elements.imagePhotographer.textContent = `Photographer: ${
-        photo.ownername || "Unknown"
-      }`;
-      this.elements.imagePhotographer.style.display =
-        Config.showPhotographer &&
-        infoExpanded &&
-        !URLParamsHandler.params.hideInfo
-          ? "block"
-          : "none";
+      this.elements.imageTitle.textContent = title || "Untitled";
+      this.elements.imageDescription.textContent = description;
+      this.elements.imageLocation.textContent =
+        Config.showLocation && hasLocation
+          ? `${photo.latitude}, ${photo.longitude}`
+          : "";
+      this.elements.imagePhotographer.textContent =
+        Config.showPhotographer && photo.ownername
+          ? `Photograph by ${photo.ownername}`
+          : "";
+      this.elements.flickrLink.href = photoUrl;
+
+      const digitCount = Math.max(2, String(total).length);
+      this.elements.currentSlide.textContent = String(index + 1).padStart(
+        digitCount,
+        "0"
+      );
+      this.elements.totalSlides.textContent = String(total).padStart(
+        digitCount,
+        "0"
+      );
+      this.elements.slideImg.alt = `${title || "Untitled"}, photo ${
+        index + 1
+      } of ${total}`;
+      this.elements.slideAnnouncer.textContent = `Now showing ${
+        title || "Untitled"
+      }, photo ${index + 1} of ${total}`;
     },
 
     toggleInfoExpanded(isExpanded) {
-      // Skip if hideInfo parameter is set
-      if (URLParamsHandler.params.hideInfo) {
-        return;
-      }
+      if (URLParamsHandler.params.hideInfo) return;
+      this.elements.imageInfo.classList.toggle("expanded", isExpanded);
+      this.elements.imageInfo.setAttribute(
+        "aria-expanded",
+        String(isExpanded)
+      );
+      this.elements.imageDetails.setAttribute(
+        "aria-hidden",
+        String(!isExpanded)
+      );
+      this.elements.imageDetails.inert = !isExpanded;
+      if (isExpanded) IdleUIHandler.hold();
+      else IdleUIHandler.wake();
+    },
 
-      this.elements.imageDescription.style.display = isExpanded
-        ? "block"
-        : "none";
+    setPaused(isPaused) {
+      this.elements.slideContainer.classList.toggle("is-paused", isPaused);
+      this.elements.pauseBtn.setAttribute("aria-pressed", String(isPaused));
+      this.elements.pauseBtn.setAttribute(
+        "aria-label",
+        isPaused ? "Resume carousel" : "Pause carousel"
+      );
+    },
 
-      if (Config.showLocation) {
-        this.elements.imageLocation.style.display = isExpanded
-          ? "block"
-          : "none";
-      }
+    restartProgress() {
+      this.elements.slideContainer.classList.remove("progress-running");
+      void this.elements.progressFill.offsetWidth;
+      this.elements.slideContainer.classList.add("progress-running");
+    },
 
-      if (Config.showPhotographer) {
-        this.elements.imagePhotographer.style.display = isExpanded
-          ? "block"
-          : "none";
-      }
+    setFitMode(shouldFill) {
+      this.elements.slideContainer.classList.toggle("fill-image", shouldFill);
+      this.elements.fitModeBtn.setAttribute("aria-pressed", String(shouldFill));
+      this.elements.fitModeBtn.setAttribute(
+        "aria-label",
+        shouldFill ? "Fit the whole photo" : "Fill the screen"
+      );
+    },
 
-      if (isExpanded) {
-        this.elements.imageInfo.classList.add("expanded");
-      } else {
-        this.elements.imageInfo.classList.remove("expanded");
-      }
+    setFullscreen(isFullscreen) {
+      this.elements.fullscreenBtn.setAttribute(
+        "aria-pressed",
+        String(isFullscreen)
+      );
+      this.elements.fullscreenBtn.setAttribute(
+        "aria-label",
+        isFullscreen ? "Exit fullscreen" : "Enter fullscreen"
+      );
     },
   };
 
-  // Flickr API proxy module
   const FlickrAPI = {
     async fetchPhotos() {
-      const url = Config.flickrApiUrl;
-
       try {
-        // Use cache: 'default' to respect HTTP caching headers
-        const response = await fetch(url, {
-          cache: "default",
-        });
+        const response = await fetch(Config.flickrApiUrl, { cache: "default" });
+
+        if (!response.ok) {
+          throw new Error(`Photo service returned ${response.status}`);
+        }
 
         const data = await response.json();
 
-        if (data.success) {
-          return data.photos;
-        } else {
+        if (!data.success) {
           throw new Error(data.message || "Unknown error fetching photos");
         }
+
+        return data.photos;
       } catch (error) {
-        console.error("Carousel: Error fetching images :: ", error);
+        console.error("Carousel: Error fetching images", error);
         return [];
       }
     },
   };
 
-  // Image handling module
   const ImageHandler = {
     photos: [],
     currentPhotoIndex: 0,
-    preloadedImages: {},
+    preloadedImages: new Map(),
+    failedPhotoIndexes: new Set(),
     infoExpanded: false,
 
-    // Get the best available size for a photo based on display size
     getBestImageUrl(photo) {
-      const viewportWidth = window.innerWidth;
-
-      // Define size options with their thresholds in descending order
+      const displayWidth =
+        Math.max(window.innerWidth, window.innerHeight) *
+        Math.min(window.devicePixelRatio || 1, 2);
       const sizeOptions = [
         { suffix: "6k", minWidth: 5120 },
         { suffix: "5k", minWidth: 4096 },
@@ -189,222 +227,258 @@
         { suffix: "3k", minWidth: 2048 },
         { suffix: "k", minWidth: 1600 },
         { suffix: "h", minWidth: 1024 },
-        { suffix: "b", minWidth: 0 }, // Always acceptable (minimum threshold)
+        { suffix: "b", minWidth: 0 },
       ];
 
-      // Find the first size that's both available and appropriate for viewport
       for (const option of sizeOptions) {
-        const urlKey = `url_${option.suffix}`;
-
-        // If this size is available and viewport is wide enough
-        if (photo[urlKey] && viewportWidth >= option.minWidth) {
-          return photo[urlKey];
-        }
+        const imageUrl = photo[`url_${option.suffix}`];
+        if (imageUrl && displayWidth >= option.minWidth) return imageUrl;
       }
 
-      // If we get here, none of the specified sizes are available
-      // Return the original image URL if it exists
-      if (photo.url_o) {
-        return photo.url_o;
-      }
-
-      // If no suitable image URL is found, return null to indicate this photo should be skipped
-      return null;
+      return photo.url_o || null;
     },
 
     shuffleArray(array) {
-      const newArray = [...array]; // Create a copy to avoid mutating the original
-      for (let i = newArray.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [newArray[i], newArray[j]] = [newArray[j], newArray[i]];
+      const shuffled = [...array];
+
+      for (let index = shuffled.length - 1; index > 0; index -= 1) {
+        const randomIndex = Math.floor(Math.random() * (index + 1));
+        [shuffled[index], shuffled[randomIndex]] = [
+          shuffled[randomIndex],
+          shuffled[index],
+        ];
       }
-      return newArray;
+
+      return shuffled;
     },
 
     preloadImage(index) {
-      if (index >= this.photos.length) return;
+      if (index < 0 || index >= this.photos.length) return Promise.resolve(null);
 
-      const photo = this.photos[index];
-      const imgUrl = this.getBestImageUrl(photo);
-
-      // Skip preloading if no suitable URL is found
-      if (!imgUrl) return;
-
-      if (!this.preloadedImages[imgUrl]) {
-        const img = new Image();
-        img.src = imgUrl;
-        this.preloadedImages[imgUrl] = img;
-
-        console.log(`Image: preloading ${index} from \'${imgUrl}\'`);
+      const imageUrl = this.getBestImageUrl(this.photos[index]);
+      if (!imageUrl) return Promise.resolve(null);
+      if (this.preloadedImages.has(imageUrl)) {
+        return this.preloadedImages.get(imageUrl).promise;
       }
+
+      const image = new Image();
+      const promise = new Promise((resolve, reject) => {
+        image.addEventListener("load", () => resolve(image), { once: true });
+        image.addEventListener(
+          "error",
+          () => reject(new Error(`Unable to load ${imageUrl}`)),
+          { once: true }
+        );
+      });
+
+      this.preloadedImages.set(imageUrl, { image, promise });
+      image.src = imageUrl;
+      return promise;
     },
 
-    // Toggle display of additional info
     toggleInfoDetails(event) {
-      // Skip if hideInfo parameter is set
-      if (URLParamsHandler.params.hideInfo) {
-        console.log("UI: Info display hidden by URL parameter, toggle ignored");
+      if (
+        URLParamsHandler.params.hideInfo ||
+        event.target.closest("#flickr-link")
+      ) {
         return;
-      }
-
-      if (event.target === UI.elements.flickrLink) {
-        return; // Don't toggle if clicking on the Flickr link
       }
 
       this.infoExpanded = !this.infoExpanded;
       UI.toggleInfoExpanded(this.infoExpanded);
     },
 
-    // Initialize photos
     async initializePhotos() {
       const allPhotos = await FlickrAPI.fetchPhotos();
+      this.photos = allPhotos.filter((photo) => this.getBestImageUrl(photo));
+      this.failedPhotoIndexes.clear();
 
-      // Filter out photos that don't have any usable image URLs
-      this.photos = allPhotos.filter((photo) => {
-        const imageUrl = this.getBestImageUrl(photo);
-        return imageUrl !== null;
-      });
-
-      console.log(`Image: ${this.photos.length} images loaded`);
-
-      if (Config.randomOrder) {
-        this.photos = this.shuffleArray(this.photos);
-        console.log("Image: shuffled into random order");
-      }
-
+      if (Config.randomOrder) this.photos = this.shuffleArray(this.photos);
+      console.log(`Carousel: ${this.photos.length} photos loaded`);
       return this.photos.length > 0;
     },
+
+    findNextAvailableIndex(fromIndex, direction) {
+      for (let offset = 1; offset <= this.photos.length; offset += 1) {
+        const index =
+          (fromIndex + direction * offset + this.photos.length) %
+          this.photos.length;
+        if (!this.failedPhotoIndexes.has(index)) return index;
+      }
+
+      return null;
+    },
   };
 
-  // Carousel controller
   const Carousel = {
     timer: null,
-    isPaused: false,
-    transitionDelay: 1000, // ms
+    pauseReasons: new Set(),
+    isTransitioning: false,
+    activeDirection: null,
+    queuedDirection: null,
+    transitionToken: 0,
 
-    // Display a photo
-    showPhoto(index) {
+    get isPaused() {
+      return this.pauseReasons.size > 0;
+    },
+
+    clearTimer() {
+      if (this.timer) window.clearTimeout(this.timer);
+      this.timer = null;
+    },
+
+    scheduleNext() {
+      this.clearTimer();
+      UI.restartProgress();
+
+      if (this.isPaused || ImageHandler.photos.length < 2) return;
+      this.timer = window.setTimeout(() => this.navigate(1), Config.interval);
+    },
+
+    async showPhoto(index, options = {}) {
+      const { direction = 1, immediate = false } = options;
       const photo = ImageHandler.photos[index];
-      const imgUrl = ImageHandler.getBestImageUrl(photo);
+      const imageUrl = ImageHandler.getBestImageUrl(photo);
+      const token = ++this.transitionToken;
 
-      // This check should never be triggered due to our filtering, but just in case
-      if (!imgUrl) {
-        console.error(`Image: No suitable image URL found index ${index}`);
-        // Skip to next photo
-        ImageHandler.currentPhotoIndex =
-          (ImageHandler.currentPhotoIndex + 1) % ImageHandler.photos.length;
-        this.showPhoto(ImageHandler.currentPhotoIndex);
+      if (!imageUrl) {
+        ImageHandler.failedPhotoIndexes.add(index);
+        const nextIndex = ImageHandler.findNextAvailableIndex(index, direction);
+        if (nextIndex === null) UI.showError("Unable to load the tray");
+        else this.showPhoto(nextIndex, { direction });
         return;
       }
 
-      if (UI.elements.loadingIndicator.style.display !== "none") {
+      this.clearTimer();
+
+      try {
+        await ImageHandler.preloadImage(index);
+      } catch (error) {
+        console.error(`Carousel: Failed to preload photo ${index}`, error);
+        ImageHandler.failedPhotoIndexes.add(index);
+        if (token === this.transitionToken) {
+          const nextIndex = ImageHandler.findNextAvailableIndex(index, direction);
+          if (nextIndex === null) UI.showError("Unable to load the tray");
+          else this.showPhoto(nextIndex, { direction });
+        }
+        return;
+      }
+
+      if (token !== this.transitionToken) return;
+
+      if (immediate || URLParamsHandler.params.disableTransitions) {
+        UI.elements.slideImg.src = imageUrl;
+        UI.updatePhotoInfo(photo, index, ImageHandler.photos.length);
+        ImageHandler.currentPhotoIndex = index;
         UI.hideLoading();
+        ImageHandler.preloadImage(
+          (index + 1) % ImageHandler.photos.length
+        ).catch(() => {});
+        this.scheduleNext();
+        return;
       }
 
-      UI.fadeOut();
+      this.isTransitioning = true;
+      this.activeDirection = direction;
+      UI.elements.nextSlideImg.src = imageUrl;
+      UI.elements.nextSlideImg.alt = "";
+      UI.setTransitionState(true, direction);
 
-      const nextIndex = (index + 1) % ImageHandler.photos.length;
-      ImageHandler.preloadImage(nextIndex);
+      const duration = UI.getTransitionDuration();
+      const midpoint = Math.round(duration * 0.5);
+      await wait(midpoint);
 
-      // Apply no transition if specified in URL
-      const transitionDelay = URLParamsHandler.params.disableTransitions
-        ? 0
-        : this.transitionDelay;
+      if (token !== this.transitionToken) return;
+      UI.updatePhotoInfo(photo, index, ImageHandler.photos.length);
+      await wait(duration - midpoint + 30);
 
-      setTimeout(() => {
-        UI.updatePhoto(photo, imgUrl, ImageHandler.infoExpanded);
-        UI.fadeIn();
-      }, transitionDelay);
-    },
+      if (token !== this.transitionToken) return;
+      UI.elements.slideImg.src = imageUrl;
+      UI.elements.nextSlideImg.removeAttribute("src");
+      UI.setTransitionState(false);
+      ImageHandler.currentPhotoIndex = index;
+      this.isTransitioning = false;
+      this.activeDirection = null;
 
-    // Start the carousel
-    start() {
-      if (this.timer) {
-        clearInterval(this.timer);
+      ImageHandler.preloadImage(
+        (index + direction + ImageHandler.photos.length) %
+          ImageHandler.photos.length
+      ).catch(() => {});
+
+      if (this.queuedDirection !== null) {
+        const queuedDirection = this.queuedDirection;
+        this.queuedDirection = null;
+        this.navigate(queuedDirection);
+        return;
       }
 
-      this.timer = setInterval(() => {
-        ImageHandler.currentPhotoIndex =
-          (ImageHandler.currentPhotoIndex + 1) % ImageHandler.photos.length;
-        this.showPhoto(ImageHandler.currentPhotoIndex);
-      }, Config.interval);
+      this.scheduleNext();
     },
 
-    // Pause carousel
-    pause() {
-      this.isPaused = true;
-      if (this.timer) {
-        clearInterval(this.timer);
-        this.timer = null;
-        console.log("Carousel: paused");
+    navigate(direction) {
+      if (ImageHandler.photos.length < 2) return;
+
+      if (this.isTransitioning) {
+        if (direction !== this.activeDirection) {
+          this.queuedDirection = direction;
+        }
+        return;
       }
+
+      const targetIndex = ImageHandler.findNextAvailableIndex(
+        ImageHandler.currentPhotoIndex,
+        direction
+      );
+      if (targetIndex === null) return;
+      this.showPhoto(targetIndex, { direction });
     },
 
-    // Resume carousel
-    resume() {
-      if (!this.isPaused) return;
+    pause(reason = "manual") {
+      this.pauseReasons.add(reason);
+      this.clearTimer();
+      UI.setPaused(true);
+    },
 
-      this.isPaused = false;
-      this.start();
-      console.log("Carousel: resumed");
+    resume(reason = "manual") {
+      this.pauseReasons.delete(reason);
+      if (this.isPaused) return;
+      UI.setPaused(false);
+      this.scheduleNext();
+    },
+
+    togglePause() {
+      if (this.pauseReasons.has("manual")) {
+        this.resume("manual");
+      } else {
+        this.pause("manual");
+      }
     },
   };
 
-  // Fullscreen functionality
   const FullscreenHandler = {
-    toggle() {
-      // Skip if hideInfo parameter is set
-      if (URLParamsHandler.params.hideInfo) {
-        console.log(
-          "UI: Buttons hidden by URL parameter, fullscreen toggle ignored"
-        );
-        return;
-      }
+    async toggle() {
+      if (URLParamsHandler.params.hideInfo) return;
 
-      const container = document.documentElement;
-
-      if (!document.fullscreenElement) {
-        // Enter fullscreen
-        if (container.requestFullscreen) {
-          container.requestFullscreen();
-        } else if (container.webkitRequestFullScreen) {
-          container.webkitRequestFullScreen();
-        } else if (container.mozRequestFullScreen) {
-          container.mozRequestFullScreen();
-        } else if (container.msRequestFullscreen) {
-          container.msRequestFullscreen();
+      try {
+        if (!document.fullscreenElement) {
+          await document.documentElement.requestFullscreen();
+        } else {
+          await document.exitFullscreen();
         }
-      } else {
-        // Exit fullscreen
-        if (document.exitFullscreen) {
-          document.exitFullscreen();
-        } else if (document.webkitExitFullscreen) {
-          document.webkitExitFullscreen();
-        } else if (document.mozCancelFullScreen) {
-          document.mozCancelFullScreen();
-        } else if (document.msExitFullscreen) {
-          document.msExitFullscreen();
-        }
+      } catch (error) {
+        console.error("Carousel: Fullscreen request failed", error);
       }
     },
   };
 
   const FitModeHandler = {
     toggle() {
-      const isCurrentlyWidthPriority =
-        UI.elements.slideImg.classList.contains("width-priority");
-
-      if (isCurrentlyWidthPriority) {
-        UI.elements.slideImg.classList.remove("width-priority");
-        console.log("Image: fit mode changed to 'height priority'");
-      } else {
-        UI.elements.slideImg.classList.add("width-priority");
-        console.log("Image: fit mode changed to 'width priority'");
-      }
+      UI.setFitMode(
+        !UI.elements.slideContainer.classList.contains("fill-image")
+      );
     },
   };
 
-  // Swipe handling functionality
   const SwipeHandler = {
     touchStartX: null,
     touchStartY: null,
@@ -415,258 +489,264 @@
     },
 
     handleTouchEnd(event) {
-      if (!this.touchStartX || !this.touchStartY) {
-        return;
+      if (this.touchStartX === null || this.touchStartY === null) return;
+
+      const differenceX = this.touchStartX - event.changedTouches[0].clientX;
+      const differenceY = this.touchStartY - event.changedTouches[0].clientY;
+
+      if (
+        Math.abs(differenceX) > Math.abs(differenceY) &&
+        Math.abs(differenceX) > 50
+      ) {
+        Carousel.navigate(differenceX > 0 ? 1 : -1);
       }
 
-      const touchEndX = event.changedTouches[0].clientX;
-      const touchEndY = event.changedTouches[0].clientY;
-
-      const diffX = this.touchStartX - touchEndX;
-      const diffY = this.touchStartY - touchEndY;
-
-      // Only register as horizontal swipe if horizontal movement is greater than vertical
-      // and if the swipe distance is significant enough (> 50px)
-      if (Math.abs(diffX) > Math.abs(diffY) && Math.abs(diffX) > 50) {
-        if (diffX > 0) {
-          // Swiped left - show next image
-          clearInterval(Carousel.timer);
-          ImageHandler.currentPhotoIndex =
-            (ImageHandler.currentPhotoIndex + 1) % ImageHandler.photos.length;
-          Carousel.showPhoto(ImageHandler.currentPhotoIndex);
-          Carousel.start();
-        } else {
-          // Swiped right - show previous image
-          clearInterval(Carousel.timer);
-          ImageHandler.currentPhotoIndex =
-            (ImageHandler.currentPhotoIndex - 1 + ImageHandler.photos.length) %
-            ImageHandler.photos.length;
-          Carousel.showPhoto(ImageHandler.currentPhotoIndex);
-          Carousel.start();
-        }
-      }
-
-      // Reset values
       this.touchStartX = null;
       this.touchStartY = null;
     },
   };
 
-  // URL Parameters handling module
   const URLParamsHandler = {
     params: {},
 
     init() {
-      // Parse URL parameters
-      const queryString = window.location.search;
-      const urlParams = new URLSearchParams(queryString);
-
-      // Store parameters (present if the parameter exists in URL)
+      const urlParams = new URLSearchParams(window.location.search);
       this.params.hideInfo = urlParams.has("hideInfo");
       this.params.disableTransitions = urlParams.has("disableTransitions");
       this.params.fillImage = urlParams.has("fillImage");
-
-      console.log("URL Parameters:", this.params);
-
-      // Apply parameters effects
       this.applyParams();
     },
 
     applyParams() {
-      // Hide info display and buttons if hideInfo parameter is present
-      if (this.params.hideInfo) {
-        if (UI.elements.imageInfo) {
-          UI.elements.imageInfo.style.display = "none";
-        }
-
-        if (UI.elements.fullscreenBtn) {
-          UI.elements.fullscreenBtn.style.display = "none";
-        }
-
-        if (UI.elements.fitModeBtn) {
-          UI.elements.fitModeBtn.style.display = "none";
-        }
-      }
-
-      // Disable transitions if disableTransitions parameter is present
-      if (this.params.disableTransitions) {
-        if (UI.elements.slideImg) {
-          UI.elements.slideImg.style.transition = "none";
-        }
-
-        if (UI.elements.imageInfo) {
-          UI.elements.imageInfo.style.transition = "none";
-        }
-      }
-
-      // Add width priority class if fillImage parameter is present
-      if (this.params.fillImage) {
-        if (UI.elements.slideImg) {
-          UI.elements.slideImg.classList.add("width-priority");
-        }
-      }
+      UI.elements.slideContainer.classList.toggle(
+        "ui-hidden",
+        this.params.hideInfo
+      );
+      UI.elements.slideContainer.classList.toggle(
+        "transitions-disabled",
+        this.params.disableTransitions
+      );
+      UI.setFitMode(this.params.fillImage);
     },
   };
 
-  // Event handlers
+  const IdleUIHandler = {
+    delay: 2400,
+    timer: null,
+    pointerFrame: null,
+
+    clearTimer() {
+      if (this.timer) window.clearTimeout(this.timer);
+      this.timer = null;
+    },
+
+    hasVisibleFocus() {
+      const activeElement = document.activeElement;
+      return (
+        activeElement instanceof HTMLElement &&
+        activeElement.matches(":focus-visible")
+      );
+    },
+
+    schedule() {
+      this.clearTimer();
+      if (URLParamsHandler.params.hideInfo || ImageHandler.infoExpanded) return;
+
+      this.timer = window.setTimeout(() => {
+        if (this.hasVisibleFocus() || ImageHandler.infoExpanded) return;
+        UI.elements.slideContainer.classList.add("is-ui-idle");
+      }, this.delay);
+    },
+
+    wake() {
+      UI.elements.slideContainer.classList.remove("is-ui-idle");
+      this.schedule();
+    },
+
+    hold() {
+      this.clearTimer();
+      UI.elements.slideContainer.classList.remove("is-ui-idle");
+    },
+
+    handlePointerActivity() {
+      if (this.pointerFrame) return;
+      this.pointerFrame = window.requestAnimationFrame(() => {
+        this.pointerFrame = null;
+        this.wake();
+      });
+    },
+  };
+
   const EventHandlers = {
+    resizeTimer: null,
+
     setupEventListeners() {
-      // Only add event listeners for buttons if they're not hidden by URL parameter
+      UI.elements.previousBtn.addEventListener("click", () =>
+        Carousel.navigate(-1)
+      );
+      UI.elements.nextBtn.addEventListener("click", () =>
+        Carousel.navigate(1)
+      );
+      UI.elements.pauseBtn.addEventListener("click", () =>
+        Carousel.togglePause()
+      );
+      UI.elements.fullscreenBtn.addEventListener("click", () =>
+        FullscreenHandler.toggle()
+      );
+      UI.elements.fitModeBtn.addEventListener("click", () =>
+        FitModeHandler.toggle()
+      );
+
       if (!URLParamsHandler.params.hideInfo) {
-        UI.elements.fullscreenBtn.addEventListener(
-          "click",
-          FullscreenHandler.toggle
+        UI.elements.imageInfo.addEventListener("click", (event) =>
+          ImageHandler.toggleInfoDetails(event)
         );
-        UI.elements.fitModeBtn.addEventListener("click", () =>
-          FitModeHandler.toggle()
-        );
-        UI.elements.imageInfo.addEventListener("click", (e) =>
-          ImageHandler.toggleInfoDetails(e)
-        );
-        UI.elements.imageInfo.addEventListener("mouseenter", () =>
-          Carousel.pause()
-        );
-        UI.elements.imageInfo.addEventListener("mouseleave", () =>
-          Carousel.resume()
-        );
+        UI.elements.imageInfo.addEventListener("keydown", (event) => {
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            ImageHandler.toggleInfoDetails(event);
+          }
+        });
+        UI.elements.imageInfo.addEventListener("mouseenter", () => {
+          IdleUIHandler.hold();
+          Carousel.pause("info");
+        });
+        UI.elements.imageInfo.addEventListener("mouseleave", () => {
+          Carousel.resume("info");
+          IdleUIHandler.wake();
+        });
       }
 
-      // Add touch event listeners for swipe
-      UI.elements.slideContainer.addEventListener(
-        "touchstart",
-        (e) => SwipeHandler.handleTouchStart(e),
-        { passive: false }
+      UI.elements.carouselControls.addEventListener("pointerenter", () =>
+        IdleUIHandler.hold()
       );
-      UI.elements.slideContainer.addEventListener(
-        "touchend",
-        (e) => SwipeHandler.handleTouchEnd(e),
-        { passive: false }
+      UI.elements.carouselControls.addEventListener("pointerleave", () =>
+        IdleUIHandler.wake()
       );
+      [UI.elements.previousBtn, UI.elements.nextBtn].forEach((button) => {
+        button.addEventListener("pointerenter", () => IdleUIHandler.hold());
+        button.addEventListener("pointerleave", () => IdleUIHandler.wake());
+      });
 
-      // Add keyboard navigation
-      document.addEventListener("keydown", this.handleKeyPress);
-
-      // Add responsive handling
-      window.addEventListener("resize", this.handleResize);
-
-      // Add error handling for image loading
-      UI.elements.slideImg.addEventListener("error", this.handleImageError);
+      UI.elements.slideContainer.addEventListener("touchstart", (event) => {
+        IdleUIHandler.wake();
+        SwipeHandler.handleTouchStart(event);
+      });
+      UI.elements.slideContainer.addEventListener("touchend", (event) =>
+        SwipeHandler.handleTouchEnd(event)
+      );
+      document.addEventListener("keydown", (event) =>
+        this.handleKeyPress(event)
+      );
+      document.addEventListener(
+        "pointermove",
+        () => IdleUIHandler.handlePointerActivity(),
+        { passive: true }
+      );
+      document.addEventListener("focusin", () => {
+        window.requestAnimationFrame(() => {
+          if (IdleUIHandler.hasVisibleFocus()) IdleUIHandler.hold();
+          else IdleUIHandler.wake();
+        });
+      });
+      document.addEventListener("focusout", () => IdleUIHandler.wake());
+      document.addEventListener(
+        "keydown",
+        () => IdleUIHandler.wake(),
+        { capture: true }
+      );
+      document.addEventListener("fullscreenchange", () =>
+        UI.setFullscreen(Boolean(document.fullscreenElement))
+      );
+      document.addEventListener("visibilitychange", () => {
+        if (document.hidden) Carousel.pause("visibility");
+        else Carousel.resume("visibility");
+      });
+      window.addEventListener("resize", () => this.handleResize());
     },
 
     handleKeyPress(event) {
-      // Skip key handling for buttons if they're hidden by URL parameter
-      if (URLParamsHandler.params.hideInfo && event.key === "i") {
+      if (
+        event.target instanceof HTMLAnchorElement ||
+        event.target instanceof HTMLButtonElement
+      ) {
         return;
       }
 
-      switch (event.key) {
-        case "ArrowRight":
+      switch (event.key.toLowerCase()) {
+        case "arrowright":
         case "n":
         case "l":
-          // Next photo
-          clearInterval(Carousel.timer);
-          ImageHandler.currentPhotoIndex =
-            (ImageHandler.currentPhotoIndex + 1) % ImageHandler.photos.length;
-          Carousel.showPhoto(ImageHandler.currentPhotoIndex);
-          Carousel.start();
+          Carousel.navigate(1);
           break;
-        case "ArrowLeft":
+        case "arrowleft":
         case "p":
         case "h":
-          // Previous photo
-          clearInterval(Carousel.timer);
-          ImageHandler.currentPhotoIndex =
-            (ImageHandler.currentPhotoIndex - 1 + ImageHandler.photos.length) %
-            ImageHandler.photos.length;
-          Carousel.showPhoto(ImageHandler.currentPhotoIndex);
-          Carousel.start();
+          Carousel.navigate(-1);
           break;
         case " ":
-          // Toggle pause
-          if (Carousel.isPaused) {
-            Carousel.resume();
-          } else {
-            Carousel.pause();
-          }
+          event.preventDefault();
+          Carousel.togglePause();
           break;
         case "f":
-          // Toggle fullscreen
           FullscreenHandler.toggle();
           break;
         case "m":
-          // Toggle fit mode
           FitModeHandler.toggle();
           break;
         case "i":
-          // Toggle info
-          ImageHandler.toggleInfoDetails({ target: UI.elements.imageInfo });
+          if (!URLParamsHandler.params.hideInfo) {
+            ImageHandler.toggleInfoDetails({
+              target: UI.elements.imageInfo,
+            });
+          }
           break;
       }
     },
 
     handleResize() {
-      // Recalculate best image URL for current photo
-      const currentPhoto = ImageHandler.photos[ImageHandler.currentPhotoIndex];
-      const newBestUrl = ImageHandler.getBestImageUrl(currentPhoto);
+      window.clearTimeout(this.resizeTimer);
+      this.resizeTimer = window.setTimeout(async () => {
+        const currentPhoto =
+          ImageHandler.photos[ImageHandler.currentPhotoIndex];
+        if (!currentPhoto) return;
 
-      if (newBestUrl && newBestUrl !== UI.elements.slideImg.src) {
-        console.log("UI: resized, updating image resolution");
-        UI.elements.slideImg.src = newBestUrl;
-      }
-
-      // Clear preloaded images cache
-      ImageHandler.preloadedImages = {};
-
-      // Preload next image with new best URLs
-      const nextIndex =
-        (ImageHandler.currentPhotoIndex + 1) % ImageHandler.photos.length;
-      ImageHandler.preloadImage(nextIndex);
-    },
-
-    handleImageError() {
-      console.error(
-        `Image: Failed to load index ${ImageHandler.currentPhotoIndex}`
-      );
-      // Skip to next photo
-      ImageHandler.currentPhotoIndex =
-        (ImageHandler.currentPhotoIndex + 1) % ImageHandler.photos.length;
-      Carousel.showPhoto(ImageHandler.currentPhotoIndex);
+        const imageUrl = ImageHandler.getBestImageUrl(currentPhoto);
+        if (imageUrl && imageUrl !== UI.elements.slideImg.src) {
+          try {
+            await ImageHandler.preloadImage(ImageHandler.currentPhotoIndex);
+            UI.elements.slideImg.src = imageUrl;
+          } catch (error) {
+            console.error("Carousel: Resize image update failed", error);
+          }
+        }
+      }, 180);
     },
   };
 
-  // App initialization
   async function init() {
     UI.showLoading();
-
-    // Initialize URL parameters first
+    document.documentElement.style.setProperty(
+      "--progress-duration",
+      `${Config.interval}ms`
+    );
     URLParamsHandler.init();
+    EventHandlers.setupEventListeners();
 
     try {
       const hasPhotos = await ImageHandler.initializePhotos();
+      if (!hasPhotos) throw new Error("No photos available to display");
 
-      if (hasPhotos) {
-        ImageHandler.preloadImage(0);
-        if (ImageHandler.photos.length > 1) {
-          ImageHandler.preloadImage(1);
-        }
-
-        Carousel.showPhoto(0);
-        Carousel.start();
-
-        EventHandlers.setupEventListeners();
-      } else {
-        throw new Error("No photos available to display");
-      }
+      await ImageHandler.preloadImage(0);
+      await Carousel.showPhoto(0, { immediate: true });
     } catch (error) {
-      console.error("Carousel: Initialization error:", error);
-      UI.elements.loadingIndicator.textContent =
-        "Error loading carousel. Please try again later.";
+      console.error("Carousel: Initialization error", error);
+      UI.showError("Unable to load the tray");
     }
   }
 
-  // Initialize when the page loads
   if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", init);
+    document.addEventListener("DOMContentLoaded", init, { once: true });
   } else {
     init();
   }

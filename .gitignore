@@ -1,0 +1,17 @@
+# Local secrets
+.dev.vars
+.dev.vars.*
+!.dev.vars.example
+.env
+.env.*
+!.env.example
+
+# Cloudflare Wrangler
+.wrangler/
+
+# JavaScript dependencies
+node_modules/
+
+# Local tooling and operating-system files
+.DS_Store
+*.log

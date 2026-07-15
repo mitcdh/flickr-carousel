@@ -32,8 +32,35 @@ This application provides a slideshow experience that displays images and descri
 
 ## Development
 
+### Local preview
+
+The local preview runs through Cloudflare Wrangler so that the Flickr API proxy
+works in the same way as the deployed Worker.
+
+1. Copy the secret template:
+
+   ```sh
+   cp .dev.vars.example .dev.vars
+   ```
+
+2. Edit `.dev.vars` and replace the placeholder with your Flickr API key.
+   This file is ignored by Git and must not be committed.
+
+3. Start the development server:
+
+   ```sh
+   npx wrangler dev
+   ```
+
+4. Open the local URL printed by Wrangler, normally
+   `http://localhost:8787`.
+
+Stop the server with `Ctrl+C`.
+
+### Making changes
+
 To modify or extend this application:
 
-1. Edit the CSS in `css/carousel.css` to change the appearance.
-2. Modify the JavaScript in `js/carousel.js` to alter functionality.
-3. Update the HTML structure and personalisations in `index.html` as needed.
+1. Edit the CSS in `public/css/carousel.css` to change the appearance.
+2. Modify the JavaScript in `public/js/carousel.js` to alter functionality.
+3. Update the HTML structure and personalisations in `public/index.html` as needed.

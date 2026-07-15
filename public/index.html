@@ -3,8 +3,12 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="description" content="It's called a Carousel. It takes us to a place where we ache to go again." />
+    <meta
+      name="description"
+      content="It's called a Carousel. It takes us to a place where we ache to go again."
+    />
     <meta name="author" content="Mitchell Hewes" />
+    <meta name="theme-color" content="#080706" />
     <title>Carousel</title>
     <link rel="icon" type="image/png" href="favicon-96x96.png" sizes="96x96" />
     <link rel="icon" type="image/svg+xml" href="favicon.svg" />
@@ -13,37 +17,102 @@
     <meta name="apple-mobile-web-app-title" content="mitcdh" />
     <link rel="manifest" href="site.webmanifest" />
     <link rel="stylesheet" href="css/carousel.css" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      rel="preload"
-      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Atkinson+Hyperlegible+Next:wght@400;500;600;700&display=swap"
-      as="style"
-    />
-    <link
-      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Atkinson+Hyperlegible+Next:wght@400;500;600;700&display=swap"
+      href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Inter:wght@400;500;600;700&display=swap"
       rel="stylesheet"
     />
   </head>
   <body>
-    <div id="slide-container">
-      <div id="loading-indicator">
-        <img
-          src="logo.svg"
-          width="64"
-          height="64"
-          alt="Loading..."
-        />
+    <main id="slide-container" aria-label="Photo carousel">
+      <div id="loading-indicator" role="status">
+        <img src="logo.svg" width="64" height="64" alt="" />
+        <span>Loading the tray</span>
       </div>
-      <button id="fullscreen-btn" aria-label="Toggle fullscreen">⛶</button>
-      <button id="fit-mode-btn" aria-label="Toggle fit mode">↔</button>
-      <img id="slide" src="" alt="Slide Image" />
-      <div id="image-info">
-        <h3 id="image-title"></h3>
-        <p id="image-location"></p>
-        <p id="image-photographer"></p>
-        <p id="image-description"></p>
-        <a id="flickr-link" href="#" target="_blank">View photo on Flickr ↗</a>
+
+      <div id="slide-stage">
+        <img id="slide" class="slide-image is-current" src="" alt="" />
+        <img id="slide-next" class="slide-image is-next" src="" alt="" />
+        <div class="projector-shutter" aria-hidden="true"></div>
+        <div class="lamp-bloom" aria-hidden="true"></div>
       </div>
-    </div>
+
+      <div class="projector-grain" aria-hidden="true"></div>
+      <div class="projector-vignette" aria-hidden="true"></div>
+
+      <button id="previous-btn" class="edge-control edge-control--previous" type="button" aria-label="Previous photo">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="m15 5-7 7 7 7" />
+        </svg>
+      </button>
+      <button id="next-btn" class="edge-control edge-control--next" type="button" aria-label="Next photo">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="m9 5 7 7-7 7" />
+        </svg>
+      </button>
+
+      <section
+        id="image-info"
+        tabindex="0"
+        aria-label="Photo information"
+        aria-expanded="false"
+        aria-controls="image-details"
+      >
+        <p id="image-kicker">Now showing</p>
+        <h1 id="image-title"></h1>
+        <div id="image-details" aria-hidden="true" inert>
+          <p id="image-location"></p>
+          <p id="image-photographer"></p>
+          <p id="image-description"></p>
+          <a id="flickr-link" href="#" target="_blank" rel="noopener noreferrer">
+            View on Flickr
+            <span aria-hidden="true">↗</span>
+          </a>
+        </div>
+      </section>
+
+      <nav id="carousel-controls" aria-label="Carousel controls">
+        <button id="pause-btn" class="utility-control" type="button" aria-label="Pause carousel" aria-pressed="false">
+          <svg class="pause-icon" viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M8 6v12M16 6v12" />
+          </svg>
+          <svg class="play-icon" viewBox="0 0 24 24" aria-hidden="true">
+            <path d="m9 6 9 6-9 6Z" />
+          </svg>
+        </button>
+
+        <div class="tray-status" aria-live="polite">
+          <span id="current-slide">01</span>
+          <span class="tray-status__divider">/</span>
+          <span id="total-slides">00</span>
+        </div>
+
+        <div class="progress-track" aria-hidden="true">
+          <span id="progress-fill"></span>
+        </div>
+
+        <button id="fit-mode-btn" class="utility-control" type="button" aria-label="Fill the screen" aria-pressed="false">
+          <svg class="fill-image-icon" viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M4 5v14M20 5v14M10 12H4m0 0 3-3m-3 3 3 3M14 12h6m0 0-3-3m3 3-3 3" />
+          </svg>
+          <svg class="fit-image-icon" viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M3 5v14M21 5v14M8 9l3 3-3 3M16 9l-3 3 3 3" />
+          </svg>
+        </button>
+        <button id="fullscreen-btn" class="utility-control" type="button" aria-label="Enter fullscreen" aria-pressed="false">
+          <svg class="enter-fullscreen-icon" viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M8 3H3v5M16 3h5v5M8 21H3v-5M16 21h5v-5" />
+          </svg>
+          <svg class="exit-fullscreen-icon" viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M3 8h5V3M21 8h-5V3M3 16h5v5M21 16h-5v5" />
+          </svg>
+        </button>
+      </nav>
+
+      <p id="keyboard-hint">Use arrows to travel · space to pause</p>
+      <p id="slide-announcer" class="visually-hidden" aria-live="polite"></p>
+    </main>
     <script src="js/carousel.js"></script>
   </body>
 </html>
