@@ -5,6 +5,7 @@ This application provides a slideshow experience that displays images and descri
 ## Features
 
 * Fullscreen image slideshow with automatic transitions and responsive design.
+* Optional synthesised slide-projector sound, muted by default.
 * Toggle between height-priority and width-priority display modes with fullscreen support.
 * Mobile-friendly interface with swipe gestures and expandable image information.
 * Can deploy as a Cloudflare worker with static assets to keep the flickr API key secret.
@@ -15,6 +16,7 @@ This application provides a slideshow experience that displays images and descri
 
 - **Left/Right Arrow Keys + Swipe Left/Right**: Navigate between images.
 - **Spacebar**: Pause/resume slideshow.
+- **S Key/Sound Button**: Mute or unmute the projector transition sound.
 - **F Key**: Toggle fullscreen mode.
 - **M Key**: Toggle between height and width priority modes.
 - **Click on Image Info/I Key**: Expand/collapse image details.

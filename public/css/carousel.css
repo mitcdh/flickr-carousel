@@ -480,15 +480,18 @@ button {
 }
 
 .play-icon,
+.sound-on-icon,
 .fit-image-icon,
 .exit-fullscreen-icon,
 #pause-btn[aria-pressed="true"] .pause-icon,
+#sound-toggle-btn[aria-pressed="false"] .sound-muted-icon,
 #fit-mode-btn[aria-pressed="true"] .fill-image-icon,
 #fullscreen-btn[aria-pressed="true"] .enter-fullscreen-icon {
   display: none;
 }
 
 #pause-btn[aria-pressed="true"] .play-icon,
+#sound-toggle-btn[aria-pressed="false"] .sound-on-icon,
 #fit-mode-btn[aria-pressed="true"] .fit-image-icon,
 #fullscreen-btn[aria-pressed="true"] .exit-fullscreen-icon {
   display: block;
