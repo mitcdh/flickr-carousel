@@ -202,7 +202,10 @@
     muted: true,
     context: null,
     masterGain: null,
-    noiseBuffer: null,
+    sampleBuffer: null,
+    samplePromise: null,
+    activeSource: null,
+    sampleUrl: "audio/carousel-advance.mp3",
 
     ensureContext() {
       if (this.context) return this.context;
@@ -213,95 +216,52 @@
 
       this.context = new AudioContextConstructor();
       this.masterGain = this.context.createGain();
-      this.masterGain.gain.value = 0.38;
+      this.masterGain.gain.value = 0.58;
       this.masterGain.connect(this.context.destination);
       return this.context;
     },
 
-    getNoiseBuffer() {
+    loadSample() {
       const context = this.ensureContext();
-      if (!context) return null;
-      if (this.noiseBuffer) return this.noiseBuffer;
+      if (!context) return Promise.reject(new Error("Audio is not supported"));
+      if (this.sampleBuffer) return Promise.resolve(this.sampleBuffer);
+      if (this.samplePromise) return this.samplePromise;
 
-      const frameCount = Math.floor(context.sampleRate * 0.2);
-      const buffer = context.createBuffer(1, frameCount, context.sampleRate);
-      const samples = buffer.getChannelData(0);
+      this.samplePromise = fetch(this.sampleUrl)
+        .then((response) => {
+          if (!response.ok) {
+            throw new Error(`Projector sound returned ${response.status}`);
+          }
+          return response.arrayBuffer();
+        })
+        .then((audioData) => context.decodeAudioData(audioData))
+        .then((buffer) => {
+          this.sampleBuffer = buffer;
+          return buffer;
+        })
+        .catch((error) => {
+          this.samplePromise = null;
+          throw error;
+        });
 
-      for (let index = 0; index < frameCount; index += 1) {
-        samples[index] = Math.random() * 2 - 1;
+      return this.samplePromise;
+    },
+
+    stopActiveSound() {
+      if (!this.activeSource) return;
+
+      try {
+        this.activeSource.stop();
+      } catch (_error) {
+        // The source may already have reached its natural end.
       }
-
-      this.noiseBuffer = buffer;
-      return buffer;
-    },
-
-    playNoise(startTime, options = {}) {
-      const context = this.context;
-      const buffer = this.getNoiseBuffer();
-      if (!context || !buffer || !this.masterGain) return;
-
-      const {
-        duration = 0.035,
-        frequency = 1400,
-        volume = 0.12,
-      } = options;
-      const source = context.createBufferSource();
-      const filter = context.createBiquadFilter();
-      const gain = context.createGain();
-      const endTime = startTime + duration;
-
-      source.buffer = buffer;
-      filter.type = "bandpass";
-      filter.frequency.setValueAtTime(frequency, startTime);
-      filter.Q.setValueAtTime(0.8, startTime);
-      gain.gain.setValueAtTime(0.0001, startTime);
-      gain.gain.exponentialRampToValueAtTime(
-        Math.max(volume, 0.0001),
-        startTime + 0.003
-      );
-      gain.gain.exponentialRampToValueAtTime(0.0001, endTime);
-
-      source.connect(filter).connect(gain).connect(this.masterGain);
-      source.start(startTime);
-      source.stop(endTime);
-    },
-
-    playTone(startTime, options = {}) {
-      const context = this.context;
-      if (!context || !this.masterGain) return;
-
-      const {
-        frequency = 110,
-        endFrequency = 60,
-        duration = 0.1,
-        volume = 0.1,
-        type = "triangle",
-      } = options;
-      const oscillator = context.createOscillator();
-      const gain = context.createGain();
-      const endTime = startTime + duration;
-
-      oscillator.type = type;
-      oscillator.frequency.setValueAtTime(frequency, startTime);
-      oscillator.frequency.exponentialRampToValueAtTime(
-        Math.max(endFrequency, 1),
-        endTime
-      );
-      gain.gain.setValueAtTime(0.0001, startTime);
-      gain.gain.exponentialRampToValueAtTime(
-        Math.max(volume, 0.0001),
-        startTime + 0.006
-      );
-      gain.gain.exponentialRampToValueAtTime(0.0001, endTime);
-
-      oscillator.connect(gain).connect(this.masterGain);
-      oscillator.start(startTime);
-      oscillator.stop(endTime);
+      this.activeSource = null;
     },
 
     async toggle() {
       if (!this.muted) {
         this.muted = true;
+        this.stopActiveSound();
         UI.setSoundMuted(true);
         return;
       }
@@ -316,14 +276,19 @@
         return;
       }
 
-      this.muted = false;
-      UI.setSoundMuted(false);
-
       try {
         if (context.state !== "running") await context.resume();
+        await this.loadSample();
+        this.muted = false;
+        UI.setSoundMuted(false);
       } catch (error) {
         this.muted = true;
         UI.setSoundMuted(true);
+        UI.elements.soundToggleBtn.disabled = true;
+        UI.elements.soundToggleBtn.setAttribute(
+          "aria-label",
+          "Carousel sound is unavailable"
+        );
         console.error("Carousel: Unable to enable sound", error);
       }
     },
@@ -332,47 +297,28 @@
       if (this.muted) return;
 
       const context = this.ensureContext();
-      if (!context || context.state !== "running") return;
+      if (
+        !context ||
+        context.state !== "running" ||
+        !this.sampleBuffer ||
+        !this.masterGain
+      ) {
+        return;
+      }
 
-      const now = context.currentTime + 0.015;
-      const visualDuration = UI.getTransitionDuration() / 1000;
-      const clunkTime = now + Math.min(0.38, visualDuration * 0.42);
-      const pitchOffset = direction < 0 ? -8 : 0;
+      this.stopActiveSound();
 
-      // Solenoid release and the first movement of the tray.
-      this.playNoise(now, {
-        duration: 0.026,
-        frequency: 1850 + pitchOffset * 12,
-        volume: 0.15,
+      const source = context.createBufferSource();
+      source.buffer = this.sampleBuffer;
+      // Keep reverse navigation recognisable without making the mechanism
+      // sound like an artificial effect.
+      source.playbackRate.value = direction < 0 ? 0.985 : 1;
+      source.connect(this.masterGain);
+      source.addEventListener("ended", () => {
+        if (this.activeSource === source) this.activeSource = null;
       });
-      this.playTone(now, {
-        frequency: 145 + pitchOffset,
-        endFrequency: 76,
-        duration: 0.075,
-        volume: 0.11,
-      });
-
-      // Short ratchet ticks suggest the circular tray advancing one position.
-      [0.075, 0.125, 0.175].forEach((offset, index) => {
-        this.playNoise(now + offset, {
-          duration: 0.012,
-          frequency: 2500 - index * 260 + pitchOffset * 10,
-          volume: 0.055 - index * 0.008,
-        });
-      });
-
-      // The final low clunk lands as the shutter opens on the next slide.
-      this.playNoise(clunkTime, {
-        duration: 0.045,
-        frequency: 920 + pitchOffset * 8,
-        volume: 0.17,
-      });
-      this.playTone(clunkTime, {
-        frequency: 96 + pitchOffset,
-        endFrequency: 46,
-        duration: 0.14,
-        volume: 0.16,
-      });
+      this.activeSource = source;
+      source.start(context.currentTime + 0.012);
     },
   };
 

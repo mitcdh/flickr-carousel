@@ -5,7 +5,7 @@ This application provides a slideshow experience that displays images and descri
 ## Features
 
 * Fullscreen image slideshow with automatic transitions and responsive design.
-* Optional synthesised slide-projector sound, muted by default.
+* Optional real slide-projector transition sound, muted by default.
 * Toggle between height-priority and width-priority display modes with fullscreen support.
 * Mobile-friendly interface with swipe gestures and expandable image information.
 * Can deploy as a Cloudflare worker with static assets to keep the flickr API key secret.
@@ -33,6 +33,12 @@ This application provides a slideshow experience that displays images and descri
 4. Access the application and enjoy.
 
 ## Development
+
+### Sound credit
+
+The transition uses an edited CC0 recording of a real automatic slide advance
+by Joseph Sardin / BigSoundBank. Processing and license details are recorded in
+[`public/audio/NOTICE.md`](public/audio/NOTICE.md).
 
 ### Local preview
 
