@@ -16,10 +16,10 @@ This application provides a slideshow experience that displays images and descri
 
 - **Left/Right Arrow Keys + Swipe Left/Right**: Navigate between images.
 - **Spacebar**: Pause/resume slideshow.
-- **S Key/Sound Button**: Mute or unmute the projector transition sound.
-- **F Key**: Toggle fullscreen mode.
-- **M Key**: Toggle between height and width priority modes.
-- **Click on Image Info/I Key**: Expand/collapse image details.
+- **Alt+S/Sound Button**: Mute or unmute the projector transition sound.
+- **Alt+F**: Toggle fullscreen mode.
+- **Alt+M**: Toggle between height and width priority modes.
+- **Click on Image Info/Alt+I**: Expand/collapse image details.
 
 ## Installation
 

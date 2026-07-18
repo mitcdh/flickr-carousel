@@ -325,16 +325,31 @@ button {
     transform 680ms ease,
     background-color 420ms ease,
     border-color 420ms ease;
-  cursor: pointer;
 }
 
 #image-info:hover,
-#image-info:focus-visible,
+#image-info:focus-within,
 #image-info.expanded {
   border-color: var(--hairline);
+  border-right-color: transparent;
   background: var(--panel);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
+}
+
+.image-info__summary {
+  position: relative;
+}
+
+#image-info-toggle {
+  position: absolute;
+  z-index: 1;
+  inset: -8px -10px;
+  padding: 0;
+  border: 0;
+  border-radius: 2px;
+  background: transparent;
+  cursor: pointer;
 }
 
 #image-kicker {
@@ -483,17 +498,17 @@ button {
 .sound-on-icon,
 .fit-image-icon,
 .exit-fullscreen-icon,
-#pause-btn[aria-pressed="true"] .pause-icon,
-#sound-toggle-btn[aria-pressed="false"] .sound-muted-icon,
+#slide-container.is-paused #pause-btn .pause-icon,
+#sound-toggle-btn[aria-pressed="true"] .sound-muted-icon,
 #fit-mode-btn[aria-pressed="true"] .fill-image-icon,
-#fullscreen-btn[aria-pressed="true"] .enter-fullscreen-icon {
+#slide-container.is-fullscreen #fullscreen-btn .enter-fullscreen-icon {
   display: none;
 }
 
-#pause-btn[aria-pressed="true"] .play-icon,
-#sound-toggle-btn[aria-pressed="false"] .sound-on-icon,
+#slide-container.is-paused #pause-btn .play-icon,
+#sound-toggle-btn[aria-pressed="true"] .sound-on-icon,
 #fit-mode-btn[aria-pressed="true"] .fit-image-icon,
-#fullscreen-btn[aria-pressed="true"] .exit-fullscreen-icon {
+#slide-container.is-fullscreen #fullscreen-btn .exit-fullscreen-icon {
   display: block;
 }
 
@@ -592,9 +607,9 @@ button {
   right: clamp(18px, 3.5vw, 56px);
   bottom: 23px;
   margin: 0;
-  color: rgba(244, 234, 216, 0.24);
+  color: rgba(244, 234, 216, 0.5);
   font-family: "DM Mono", monospace;
-  font-size: 8px;
+  font-size: 9px;
   letter-spacing: 0.09em;
   text-transform: uppercase;
   transition: opacity 680ms ease;
@@ -645,11 +660,23 @@ button {
 }
 
 #slide-container.is-ui-idle #image-info:hover,
-#slide-container.is-ui-idle #image-info:focus-visible,
+#slide-container.is-ui-idle #image-info:focus-within,
 #slide-container.is-ui-idle #carousel-controls:hover,
-#slide-container.is-ui-idle .edge-control:hover {
+#slide-container.is-ui-idle #carousel-controls:focus-within,
+#slide-container.is-ui-idle .edge-control:hover,
+#slide-container.is-ui-idle .edge-control:focus-visible {
   opacity: 1 !important;
   cursor: pointer;
+}
+
+.utility-control:focus-visible {
+  color: var(--warm-white);
+  background: rgba(244, 234, 216, 0.1);
+}
+
+.edge-control:focus-visible {
+  color: #fff;
+  opacity: 1;
 }
 
 #slide-container.ui-hidden #image-info,

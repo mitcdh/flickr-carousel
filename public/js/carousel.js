@@ -27,6 +27,7 @@
       slideStage: document.getElementById("slide-stage"),
       slideContainer: document.getElementById("slide-container"),
       imageInfo: document.getElementById("image-info"),
+      imageInfoToggle: document.getElementById("image-info-toggle"),
       imageDetails: document.getElementById("image-details"),
       imageTitle: document.getElementById("image-title"),
       imageLocation: document.getElementById("image-location"),
@@ -130,18 +131,29 @@
       this.elements.slideImg.alt = `${title || "Untitled"}, photo ${
         index + 1
       } of ${total}`;
+      this.updateInfoToggleLabel(ImageHandler.infoExpanded);
       this.elements.slideAnnouncer.textContent = `Now showing ${
         title || "Untitled"
       }, photo ${index + 1} of ${total}`;
     },
 
+    updateInfoToggleLabel(isExpanded) {
+      const title = this.elements.imageTitle.textContent.trim() || "this photo";
+      const action = isExpanded ? "Hide" : "Show";
+      this.elements.imageInfoToggle.setAttribute(
+        "aria-label",
+        `${action} photo details for ${title}`
+      );
+    },
+
     toggleInfoExpanded(isExpanded) {
       if (URLParamsHandler.params.hideInfo) return;
       this.elements.imageInfo.classList.toggle("expanded", isExpanded);
-      this.elements.imageInfo.setAttribute(
+      this.elements.imageInfoToggle.setAttribute(
         "aria-expanded",
         String(isExpanded)
       );
+      this.updateInfoToggleLabel(isExpanded);
       this.elements.imageDetails.setAttribute(
         "aria-hidden",
         String(!isExpanded)
@@ -153,21 +165,20 @@
 
     setPaused(isPaused) {
       this.elements.slideContainer.classList.toggle("is-paused", isPaused);
-      this.elements.pauseBtn.setAttribute("aria-pressed", String(isPaused));
       this.elements.pauseBtn.setAttribute(
         "aria-label",
         isPaused ? "Resume carousel" : "Pause carousel"
+      );
+      this.elements.slideAnnouncer.setAttribute(
+        "aria-live",
+        isPaused ? "polite" : "off"
       );
     },
 
     setSoundMuted(isMuted) {
       this.elements.soundToggleBtn.setAttribute(
         "aria-pressed",
-        String(isMuted)
-      );
-      this.elements.soundToggleBtn.setAttribute(
-        "aria-label",
-        isMuted ? "Unmute carousel sound" : "Mute carousel sound"
+        String(!isMuted)
       );
     },
 
@@ -180,16 +191,12 @@
     setFitMode(shouldFill) {
       this.elements.slideContainer.classList.toggle("fill-image", shouldFill);
       this.elements.fitModeBtn.setAttribute("aria-pressed", String(shouldFill));
-      this.elements.fitModeBtn.setAttribute(
-        "aria-label",
-        shouldFill ? "Fit the whole photo" : "Fill the screen"
-      );
     },
 
     setFullscreen(isFullscreen) {
-      this.elements.fullscreenBtn.setAttribute(
-        "aria-pressed",
-        String(isFullscreen)
+      this.elements.slideContainer.classList.toggle(
+        "is-fullscreen",
+        isFullscreen
       );
       this.elements.fullscreenBtn.setAttribute(
         "aria-label",
@@ -412,16 +419,18 @@
       return promise;
     },
 
-    toggleInfoDetails(event) {
-      if (
-        URLParamsHandler.params.hideInfo ||
-        event.target.closest("#flickr-link")
-      ) {
-        return;
-      }
+    setInfoExpanded(isExpanded) {
+      if (URLParamsHandler.params.hideInfo) return;
+      if (this.infoExpanded === isExpanded) return;
 
-      this.infoExpanded = !this.infoExpanded;
+      this.infoExpanded = isExpanded;
       UI.toggleInfoExpanded(this.infoExpanded);
+      if (this.infoExpanded) Carousel.pauseForInteraction("info-expanded");
+      else Carousel.resume("info-expanded");
+    },
+
+    toggleInfoDetails() {
+      this.setInfoExpanded(!this.infoExpanded);
     },
 
     async initializePhotos() {
@@ -448,11 +457,14 @@
 
   const Carousel = {
     timer: null,
+    timerStartedAt: null,
+    remainingTime: Config.interval,
     pauseReasons: new Set(),
     isTransitioning: false,
     activeDirection: null,
     queuedDirection: null,
     transitionToken: 0,
+    userRequestedRotation: false,
 
     get isPaused() {
       return this.pauseReasons.size > 0;
@@ -461,14 +473,35 @@
     clearTimer() {
       if (this.timer) window.clearTimeout(this.timer);
       this.timer = null;
+      this.timerStartedAt = null;
+    },
+
+    pauseTimer() {
+      if (this.timer && this.timerStartedAt !== null) {
+        const elapsed = window.performance.now() - this.timerStartedAt;
+        this.remainingTime = Math.max(0, this.remainingTime - elapsed);
+      }
+      this.clearTimer();
+    },
+
+    startTimer() {
+      this.clearTimer();
+      if (this.isPaused || ImageHandler.photos.length < 2) return;
+
+      this.timerStartedAt = window.performance.now();
+      this.timer = window.setTimeout(() => {
+        this.timer = null;
+        this.timerStartedAt = null;
+        this.remainingTime = Config.interval;
+        this.navigate(1);
+      }, this.remainingTime);
     },
 
     scheduleNext() {
       this.clearTimer();
+      this.remainingTime = Config.interval;
       UI.restartProgress();
-
-      if (this.isPaused || ImageHandler.photos.length < 2) return;
-      this.timer = window.setTimeout(() => this.navigate(1), Config.interval);
+      this.startTimer();
     },
 
     async showPhoto(index, options = {}) {
@@ -571,24 +604,40 @@
     },
 
     pause(reason = "manual") {
+      const wasPaused = this.isPaused;
       this.pauseReasons.add(reason);
-      this.clearTimer();
-      UI.setPaused(true);
+      if (!wasPaused) {
+        this.pauseTimer();
+        UI.setPaused(true);
+      }
+    },
+
+    pauseForInteraction(reason) {
+      if (this.userRequestedRotation) return;
+      this.pause(reason);
     },
 
     resume(reason = "manual") {
-      this.pauseReasons.delete(reason);
+      const hadReason = this.pauseReasons.delete(reason);
+      if (!hadReason) return;
       if (this.isPaused) return;
       UI.setPaused(false);
-      this.scheduleNext();
+      this.startTimer();
     },
 
     togglePause() {
-      if (this.pauseReasons.has("manual")) {
-        this.resume("manual");
-      } else {
+      if (URLParamsHandler.params.hideInfo) return;
+
+      if (!this.isPaused) {
+        this.userRequestedRotation = false;
         this.pause("manual");
+        return;
       }
+
+      this.pauseReasons.clear();
+      this.userRequestedRotation = true;
+      UI.setPaused(false);
+      this.startTimer();
     },
   };
 
@@ -664,6 +713,7 @@
         this.params.disableTransitions
       );
       UI.setFitMode(this.params.fillImage);
+      if (this.params.hideInfo) Carousel.pause("hidden-ui");
     },
   };
 
@@ -716,6 +766,7 @@
 
   const EventHandlers = {
     resizeTimer: null,
+    usingKeyboard: false,
 
     setupEventListeners() {
       UI.elements.previousBtn.addEventListener("click", () =>
@@ -738,38 +789,41 @@
       );
 
       if (!URLParamsHandler.params.hideInfo) {
-        UI.elements.imageInfo.addEventListener("click", (event) =>
-          ImageHandler.toggleInfoDetails(event)
+        UI.elements.imageInfoToggle.addEventListener("click", () =>
+          ImageHandler.toggleInfoDetails()
         );
-        UI.elements.imageInfo.addEventListener("keydown", (event) => {
-          if (event.key === "Enter" || event.key === " ") {
-            event.preventDefault();
-            ImageHandler.toggleInfoDetails(event);
-          }
-        });
         UI.elements.imageInfo.addEventListener("mouseenter", () => {
           IdleUIHandler.hold();
-          Carousel.pause("info");
+          Carousel.pauseForInteraction("info-hover");
         });
         UI.elements.imageInfo.addEventListener("mouseleave", () => {
-          Carousel.resume("info");
+          Carousel.resume("info-hover");
           IdleUIHandler.wake();
         });
       }
 
-      UI.elements.carouselControls.addEventListener("pointerenter", () =>
-        IdleUIHandler.hold()
-      );
-      UI.elements.carouselControls.addEventListener("pointerleave", () =>
-        IdleUIHandler.wake()
-      );
+      UI.elements.carouselControls.addEventListener("pointerenter", () => {
+        IdleUIHandler.hold();
+        Carousel.pauseForInteraction("controls-hover");
+      });
+      UI.elements.carouselControls.addEventListener("pointerleave", () => {
+        Carousel.resume("controls-hover");
+        IdleUIHandler.wake();
+      });
       [UI.elements.previousBtn, UI.elements.nextBtn].forEach((button) => {
-        button.addEventListener("pointerenter", () => IdleUIHandler.hold());
-        button.addEventListener("pointerleave", () => IdleUIHandler.wake());
+        button.addEventListener("pointerenter", () => {
+          IdleUIHandler.hold();
+          Carousel.pauseForInteraction("edge-hover");
+        });
+        button.addEventListener("pointerleave", () => {
+          Carousel.resume("edge-hover");
+          IdleUIHandler.wake();
+        });
       });
 
       UI.elements.slideContainer.addEventListener("touchstart", (event) => {
         IdleUIHandler.wake();
+        Carousel.pauseForInteraction("touch");
         SwipeHandler.handleTouchStart(event);
       });
       UI.elements.slideContainer.addEventListener("touchend", (event) =>
@@ -783,7 +837,33 @@
         () => IdleUIHandler.handlePointerActivity(),
         { passive: true }
       );
-      document.addEventListener("focusin", () => {
+      document.addEventListener(
+        "pointerdown",
+        (event) => {
+          this.usingKeyboard = false;
+
+          if (
+            !ImageHandler.infoExpanded ||
+            !(event.target instanceof Node) ||
+            UI.elements.imageInfo.contains(event.target)
+          ) {
+            return;
+          }
+
+          ImageHandler.setInfoExpanded(false);
+          if (document.activeElement === UI.elements.imageInfoToggle) {
+            UI.elements.imageInfoToggle.blur();
+          }
+        },
+        { capture: true }
+      );
+      document.addEventListener("focusin", (event) => {
+        if (
+          this.usingKeyboard &&
+          UI.elements.slideContainer.contains(event.target)
+        ) {
+          Carousel.pauseForInteraction("focus");
+        }
         window.requestAnimationFrame(() => {
           if (IdleUIHandler.hasVisibleFocus()) IdleUIHandler.hold();
           else IdleUIHandler.wake();
@@ -792,7 +872,10 @@
       document.addEventListener("focusout", () => IdleUIHandler.wake());
       document.addEventListener(
         "keydown",
-        () => IdleUIHandler.wake(),
+        () => {
+          this.usingKeyboard = true;
+          IdleUIHandler.wake();
+        },
         { capture: true }
       );
       document.addEventListener("fullscreenchange", () =>
@@ -813,35 +896,40 @@
         return;
       }
 
-      switch (event.key.toLowerCase()) {
-        case "arrowright":
-        case "n":
-        case "l":
+      switch (event.key) {
+        case "ArrowRight":
+          Carousel.pauseForInteraction("keyboard-navigation");
           Carousel.navigate(1);
-          break;
-        case "arrowleft":
-        case "p":
-        case "h":
+          return;
+        case "ArrowLeft":
+          Carousel.pauseForInteraction("keyboard-navigation");
           Carousel.navigate(-1);
-          break;
+          return;
         case " ":
           event.preventDefault();
           Carousel.togglePause();
-          break;
-        case "f":
+          return;
+      }
+
+      if (!event.altKey || event.ctrlKey || event.metaKey) return;
+
+      switch (event.code) {
+        case "KeyF":
+          event.preventDefault();
           FullscreenHandler.toggle();
           break;
-        case "m":
+        case "KeyM":
+          event.preventDefault();
           FitModeHandler.toggle();
           break;
-        case "s":
+        case "KeyS":
+          event.preventDefault();
           SoundHandler.toggle();
           break;
-        case "i":
+        case "KeyI":
+          event.preventDefault();
           if (!URLParamsHandler.params.hideInfo) {
-            ImageHandler.toggleInfoDetails({
-              target: UI.elements.imageInfo,
-            });
+            ImageHandler.toggleInfoDetails();
           }
           break;
       }
@@ -874,6 +962,9 @@
       `${Config.interval}ms`
     );
     URLParamsHandler.init();
+    if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) {
+      Carousel.pause("reduced-motion");
+    }
     UI.setSoundMuted(true);
     EventHandlers.setupEventListeners();
 
