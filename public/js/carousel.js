@@ -728,6 +728,12 @@
     },
 
     hasVisibleFocus() {
+      if (
+        !UI.elements.slideContainer.classList.contains("is-keyboard-input")
+      ) {
+        return false;
+      }
+
       const activeElement = document.activeElement;
       return (
         activeElement instanceof HTMLElement &&
@@ -841,6 +847,7 @@
         "pointerdown",
         (event) => {
           this.usingKeyboard = false;
+          UI.elements.slideContainer.classList.remove("is-keyboard-input");
 
           if (
             !ImageHandler.infoExpanded ||
@@ -874,6 +881,7 @@
         "keydown",
         () => {
           this.usingKeyboard = true;
+          UI.elements.slideContainer.classList.add("is-keyboard-input");
           IdleUIHandler.wake();
         },
         { capture: true }

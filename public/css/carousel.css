@@ -317,6 +317,7 @@ button {
   opacity: 0;
   color: var(--warm-white);
   border: 1px solid transparent;
+  border-right-width: 0;
   border-radius: 2px;
   background: linear-gradient(100deg, rgba(5, 5, 4, 0.56), rgba(5, 5, 4, 0.12) 72%, transparent);
   text-shadow: 0 1px 16px rgba(0, 0, 0, 0.86);
@@ -328,10 +329,9 @@ button {
 }
 
 #image-info:hover,
-#image-info:focus-within,
+#slide-container.is-keyboard-input #image-info:focus-within,
 #image-info.expanded {
   border-color: var(--hairline);
-  border-right-color: transparent;
   background: var(--panel);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
@@ -660,9 +660,9 @@ button {
 }
 
 #slide-container.is-ui-idle #image-info:hover,
-#slide-container.is-ui-idle #image-info:focus-within,
+#slide-container.is-ui-idle.is-keyboard-input #image-info:focus-within,
 #slide-container.is-ui-idle #carousel-controls:hover,
-#slide-container.is-ui-idle #carousel-controls:focus-within,
+#slide-container.is-ui-idle.is-keyboard-input #carousel-controls:focus-within,
 #slide-container.is-ui-idle .edge-control:hover,
 #slide-container.is-ui-idle .edge-control:focus-visible {
   opacity: 1 !important;
@@ -698,7 +698,11 @@ button {
   border: 0 !important;
 }
 
-:focus-visible {
+#slide-container:not(.is-keyboard-input) :focus {
+  outline: none;
+}
+
+#slide-container.is-keyboard-input :focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 3px;
 }
