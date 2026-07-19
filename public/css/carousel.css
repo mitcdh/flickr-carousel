@@ -6,6 +6,8 @@
   --hairline: rgba(244, 234, 216, 0.2);
   --panel: rgba(12, 10, 8, 0.68);
   --accent: #d49a53;
+  --resting-info-opacity: 0.12;
+  --resting-controls-opacity: 0.065;
   --transition-duration: 980ms;
   --progress-duration: 10000ms;
 }
@@ -65,7 +67,7 @@ button {
   position: absolute;
   z-index: 3;
   inset: 0;
-  border: clamp(8px, 1.4vw, 22px) solid rgba(0, 0, 0, 0.34);
+  border: 0;
   box-shadow:
     inset 0 0 90px rgba(0, 0, 0, 0.28),
     inset 0 0 12px rgba(0, 0, 0, 0.68);
@@ -79,14 +81,18 @@ button {
   display: block;
   width: 100%;
   height: 100%;
-  padding: clamp(8px, 1.4vw, 22px);
+  padding: 0;
   object-fit: contain;
   object-position: center;
+  visibility: hidden;
   opacity: 0;
   filter: saturate(0.88) contrast(1.045) sepia(0.035);
   transform: scale(1.002);
   transform-origin: center;
-  will-change: opacity, filter, transform;
+}
+
+.slide-image.is-image-ready {
+  visibility: visible;
 }
 
 .slide-image.is-current {
@@ -98,13 +104,12 @@ button {
   z-index: 2;
 }
 
-#slide-container.fill-image .slide-image {
-  padding: 0;
-  object-fit: cover;
+#slide-container.is-transitioning .slide-image {
+  will-change: opacity, filter, transform;
 }
 
-#slide-container.fill-image #slide-stage::before {
-  border-width: 0;
+#slide-container.fill-image .slide-image {
+  object-fit: cover;
 }
 
 .projector-shutter,
@@ -122,25 +127,33 @@ button {
 
 .lamp-bloom {
   background:
-    radial-gradient(circle at 50% 48%, rgba(255, 247, 218, 0.29), transparent 45%),
+    radial-gradient(
+      circle at 50% 48%,
+      rgba(255, 247, 218, 0.29),
+      transparent 45%
+    ),
     rgba(255, 242, 204, 0.05);
   mix-blend-mode: screen;
 }
 
 #slide-container.is-transitioning.is-forward .slide-image.is-current {
-  animation: slide-out-forward var(--transition-duration) cubic-bezier(0.42, 0, 0.3, 1) both;
+  animation: slide-out-forward var(--transition-duration)
+    cubic-bezier(0.42, 0, 0.3, 1) both;
 }
 
 #slide-container.is-transitioning.is-forward .slide-image.is-next {
-  animation: slide-in-forward var(--transition-duration) cubic-bezier(0.32, 0, 0.24, 1) both;
+  animation: slide-in-forward var(--transition-duration)
+    cubic-bezier(0.32, 0, 0.24, 1) both;
 }
 
 #slide-container.is-transitioning.is-backward .slide-image.is-current {
-  animation: slide-out-backward var(--transition-duration) cubic-bezier(0.42, 0, 0.3, 1) both;
+  animation: slide-out-backward var(--transition-duration)
+    cubic-bezier(0.42, 0, 0.3, 1) both;
 }
 
 #slide-container.is-transitioning.is-backward .slide-image.is-next {
-  animation: slide-in-backward var(--transition-duration) cubic-bezier(0.32, 0, 0.24, 1) both;
+  animation: slide-in-backward var(--transition-duration)
+    cubic-bezier(0.32, 0, 0.24, 1) both;
 }
 
 #slide-container.is-transitioning .projector-shutter {
@@ -260,7 +273,7 @@ button {
 .projector-grain {
   width: 110%;
   height: 110%;
-  opacity: 0.075;
+  opacity: 0.09;
   background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 180 180' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.95' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.9'/%3E%3C/svg%3E");
   mix-blend-mode: soft-light;
   animation: grain-shift 420ms steps(2, end) infinite;
@@ -268,16 +281,37 @@ button {
 
 .projector-vignette {
   background:
-    linear-gradient(to bottom, rgba(0, 0, 0, 0.2), transparent 15%, transparent 78%, rgba(0, 0, 0, 0.56)),
-    radial-gradient(ellipse at center, transparent 48%, rgba(0, 0, 0, 0.32) 84%, rgba(0, 0, 0, 0.72) 100%);
+    linear-gradient(
+      to bottom,
+      rgba(0, 0, 0, 0.24),
+      transparent 15%,
+      transparent 78%,
+      rgba(0, 0, 0, 0.62)
+    ),
+    radial-gradient(
+      ellipse at center,
+      transparent 48%,
+      rgba(0, 0, 0, 0.38) 84%,
+      rgba(0, 0, 0, 0.78) 100%
+    );
 }
 
 @keyframes grain-shift {
-  0% { transform: translate(-3%, -3%); }
-  25% { transform: translate(-7%, -1%); }
-  50% { transform: translate(-2%, -6%); }
-  75% { transform: translate(-6%, -4%); }
-  100% { transform: translate(-3%, -3%); }
+  0% {
+    transform: translate(-3%, -3%);
+  }
+  25% {
+    transform: translate(-7%, -1%);
+  }
+  50% {
+    transform: translate(-2%, -6%);
+  }
+  75% {
+    transform: translate(-6%, -4%);
+  }
+  100% {
+    transform: translate(-3%, -3%);
+  }
 }
 
 #loading-indicator {
@@ -296,6 +330,10 @@ button {
   transform: translate(-50%, -50%);
 }
 
+#loading-indicator[hidden] {
+  display: none;
+}
+
 #loading-indicator img {
   opacity: 0.86;
   animation: loading-pulse 1.35s ease-in-out infinite;
@@ -303,24 +341,30 @@ button {
 
 @keyframes loading-pulse {
   0%,
-  100% { opacity: 0.86; transform: scale(1); }
-  50% { opacity: 0.28; transform: scale(0.94); }
+  100% {
+    opacity: 0.86;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.28;
+    transform: scale(0.94);
+  }
 }
 
 #image-info {
   position: absolute;
   z-index: 10;
-  bottom: 58px;
+  bottom: 18px;
   left: clamp(18px, 3.5vw, 56px);
   width: min(430px, calc(100vw - 36px));
   padding: 18px 20px 16px;
   opacity: 0;
   color: var(--warm-white);
   border: 1px solid transparent;
-  border-right-width: 0;
   border-radius: 2px;
-  background: linear-gradient(100deg, rgba(5, 5, 4, 0.56), rgba(5, 5, 4, 0.12) 72%, transparent);
+  background: transparent;
   text-shadow: 0 1px 16px rgba(0, 0, 0, 0.86);
+  transform: translate(var(--info-offset-x, 0), 6px);
   transition:
     opacity 680ms ease,
     transform 680ms ease,
@@ -328,13 +372,23 @@ button {
     border-color 420ms ease;
 }
 
-#image-info:hover,
-#slide-container.is-keyboard-input #image-info:focus-within,
-#image-info.expanded {
+#slide-container.is-ui-ready #image-info {
+  opacity: var(--resting-info-opacity);
+  transform: translate(var(--info-offset-x, 0), 0);
+}
+
+/* Keep both the panel and its content fully readable while it is active. */
+#slide-container #image-info:hover,
+#slide-container #image-info:focus-within,
+#slide-container #image-info.expanded,
+#slide-container #image-info.is-pointer-active {
+  opacity: 1;
   border-color: var(--hairline);
   background: var(--panel);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
+  transform: translate(var(--info-offset-x, 0), 0);
+  transition-duration: 140ms, 220ms, 220ms, 220ms;
 }
 
 .image-info__summary {
@@ -437,22 +491,39 @@ button {
   left: 50%;
   display: flex;
   align-items: center;
-  gap: 5px;
+  gap: 3px;
   min-height: 40px;
-  padding: 5px;
-  border: 1px solid rgba(244, 234, 216, 0.12);
-  border-radius: 999px;
+  padding: 5px 6px;
+  opacity: 0;
+  border: 1px solid transparent;
+  border-radius: 2px;
+  background: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  transform: translateX(-50%);
+  transition:
+    opacity 680ms ease,
+    background-color 520ms ease,
+    border-color 520ms ease,
+    box-shadow 520ms ease;
+}
+
+#slide-container.is-ui-ready #carousel-controls {
+  opacity: var(--resting-controls-opacity);
+}
+
+#slide-container.is-ui-ready #carousel-controls:hover,
+#slide-container.is-ui-ready #carousel-controls:focus-within,
+#slide-container.is-ui-ready #carousel-controls.is-pointer-active,
+#slide-container.is-ui-ready.is-paused #carousel-controls {
+  opacity: 1;
+  border-color: rgba(244, 234, 216, 0.12);
   background: rgba(8, 7, 6, 0.42);
   box-shadow: 0 8px 28px rgba(0, 0, 0, 0.16);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
-  transform: translateX(-50%);
-  transition:
-    opacity 680ms ease,
-    transform 680ms ease,
-    background-color 520ms ease,
-    border-color 520ms ease,
-    box-shadow 520ms ease;
+  transition-duration: 140ms, 220ms, 220ms, 220ms;
 }
 
 .utility-control,
@@ -474,7 +545,7 @@ button {
 .utility-control {
   width: 30px;
   height: 30px;
-  border-radius: 50%;
+  border-radius: 2px;
 }
 
 .utility-control:hover {
@@ -558,8 +629,12 @@ button {
 }
 
 @keyframes carousel-progress {
-  from { transform: scaleX(0); }
-  to { transform: scaleX(1); }
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
 }
 
 .edge-control {
@@ -615,39 +690,12 @@ button {
   transition: opacity 680ms ease;
 }
 
-#slide-container.is-transitioning #image-info {
-  opacity: 0.16 !important;
-}
-
-#slide-container.is-transitioning #carousel-controls {
-  opacity: 0.2;
-}
-
 #slide-container.is-transitioning .edge-control {
   opacity: 0.06;
 }
 
 #slide-container.is-ui-idle {
   cursor: none;
-}
-
-#slide-container.is-ui-idle #image-info:not(.expanded) {
-  opacity: 0.12 !important;
-  border-color: transparent;
-  background: transparent;
-  transform: translateY(6px);
-  backdrop-filter: none;
-  -webkit-backdrop-filter: none;
-}
-
-#slide-container.is-ui-idle #carousel-controls {
-  opacity: 0.065;
-  border-color: transparent;
-  background: rgba(8, 7, 6, 0.06);
-  box-shadow: none;
-  transform: translate(-50%, 6px);
-  backdrop-filter: blur(2px);
-  -webkit-backdrop-filter: blur(2px);
 }
 
 #slide-container.is-ui-idle .edge-control {
@@ -659,10 +707,6 @@ button {
   opacity: 0;
 }
 
-#slide-container.is-ui-idle #image-info:hover,
-#slide-container.is-ui-idle.is-keyboard-input #image-info:focus-within,
-#slide-container.is-ui-idle #carousel-controls:hover,
-#slide-container.is-ui-idle.is-keyboard-input #carousel-controls:focus-within,
 #slide-container.is-ui-idle .edge-control:hover,
 #slide-container.is-ui-idle .edge-control:focus-visible {
   opacity: 1 !important;
@@ -711,31 +755,30 @@ button {
   animation: none;
 }
 
+@media (max-width: 1279px) {
+  #image-info {
+    --info-offset-x: -50%;
+
+    bottom: 72px;
+    left: 50%;
+  }
+
+  .image-info__summary {
+    text-align: center;
+  }
+}
+
 @media (max-width: 860px) {
   #keyboard-hint {
     display: none;
   }
-
-  #image-info {
-    bottom: 72px;
-  }
 }
 
 @media (max-width: 640px) {
-  .slide-image {
-    padding: 0;
-  }
-
-  #slide-stage::before {
-    border-width: 0;
-  }
-
   #image-info {
     bottom: 74px;
-    left: 12px;
     width: calc(100vw - 24px);
     padding: 14px 15px 13px;
-    background: linear-gradient(100deg, rgba(5, 5, 4, 0.8), rgba(5, 5, 4, 0.18));
   }
 
   #image-title {
@@ -760,7 +803,7 @@ button {
   }
 
   .projector-grain {
-    opacity: 0.05;
+    opacity: 0.06;
   }
 }
 
@@ -800,11 +843,19 @@ button {
 }
 
 @keyframes reduced-fade-out {
-  from { opacity: 1; }
-  to { opacity: 0; }
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
 }
 
 @keyframes reduced-fade-in {
-  from { opacity: 0; }
-  to { opacity: 1; }
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }

@@ -1,30 +1,59 @@
 (function () {
-  const Config = {
+  const IMAGE_SIZE_OPTIONS = Object.freeze([
+    { suffix: "6k", minWidth: 5120 },
+    { suffix: "5k", minWidth: 4096 },
+    { suffix: "4k", minWidth: 3072 },
+    { suffix: "3k", minWidth: 2048 },
+    { suffix: "k", minWidth: 1600 },
+    { suffix: "h", minWidth: 1024 },
+    { suffix: "b", minWidth: 0 },
+  ]);
+  const API_REQUEST_TIMEOUT = 15000;
+  const POINTER_HANDOFF_DELAY = 120;
+  const PauseReason = Object.freeze({
+    controlsHover: "controls-hover",
+    edgeHover: "edge-hover",
+    focus: "focus",
+    hiddenUI: "hidden-ui",
+    infoExpanded: "info-expanded",
+    infoHover: "info-hover",
+    manual: "manual",
+    reducedMotion: "reduced-motion",
+    touch: "touch",
+    visibility: "visibility",
+  });
+  const OVERRIDABLE_PAUSE_REASONS = new Set([
+    PauseReason.controlsHover,
+    PauseReason.edgeHover,
+    PauseReason.focus,
+    PauseReason.infoExpanded,
+    PauseReason.infoHover,
+    PauseReason.touch,
+  ]);
+
+  const Config = Object.freeze({
     interval: 10000,
     randomOrder: true,
     showPhotographer: true,
     showLocation: true,
     userId: "83515912@N03",
     flickrApiUrl: "/flickr-api-proxy/",
-
-    update(newConfig) {
-      Object.assign(this, newConfig);
-      document.documentElement.style.setProperty(
-        "--progress-duration",
-        `${this.interval}ms`
-      );
-    },
-  };
+  });
 
   const wait = (duration) =>
     new Promise((resolve) => window.setTimeout(resolve, duration));
+
+  const getPhotoTitle = (photo) => {
+    const title =
+      typeof photo.title === "string" ? photo.title : photo.title?._content;
+    return title?.trim() || "Untitled";
+  };
 
   const UI = {
     elements: {
       loadingIndicator: document.getElementById("loading-indicator"),
       slideImg: document.getElementById("slide"),
       nextSlideImg: document.getElementById("slide-next"),
-      slideStage: document.getElementById("slide-stage"),
       slideContainer: document.getElementById("slide-container"),
       imageInfo: document.getElementById("image-info"),
       imageInfoToggle: document.getElementById("image-info-toggle"),
@@ -48,13 +77,15 @@
     },
 
     showLoading() {
-      this.elements.loadingIndicator.style.display = "grid";
+      this.elements.loadingIndicator.hidden = false;
     },
 
     hideLoading() {
-      this.elements.loadingIndicator.style.display = "none";
+      if (this.elements.loadingIndicator.hidden) return;
+
+      this.elements.loadingIndicator.hidden = true;
       if (!URLParamsHandler.params.hideInfo) {
-        this.elements.imageInfo.style.opacity = "1";
+        this.elements.slideContainer.classList.add("is-ui-ready");
       }
       IdleUIHandler.wake();
     },
@@ -63,9 +94,30 @@
       const label = this.elements.loadingIndicator.querySelector("span");
       const icon = this.elements.loadingIndicator.querySelector("img");
 
-      if (icon) icon.style.display = "none";
+      if (icon) icon.hidden = true;
       if (label) label.textContent = message;
-      this.elements.loadingIndicator.style.display = "grid";
+      this.elements.loadingIndicator.hidden = false;
+    },
+
+    setSlideSource(image, source) {
+      image.classList.remove("is-image-ready");
+      if (!source) {
+        image.removeAttribute("src");
+        return;
+      }
+
+      image.src = source;
+      image.classList.add("is-image-ready");
+    },
+
+    clearSlideSource(image) {
+      image.classList.remove("is-image-ready");
+      image.removeAttribute("src");
+    },
+
+    handleSlideImageError(image) {
+      this.clearSlideSource(image);
+      image.alt = "";
     },
 
     getTransitionDuration() {
@@ -81,25 +133,24 @@
     setTransitionState(isTransitioning, direction = 1) {
       this.elements.slideContainer.classList.toggle(
         "is-transitioning",
-        isTransitioning
+        isTransitioning,
       );
       this.elements.slideContainer.classList.toggle(
         "is-forward",
-        isTransitioning && direction >= 0
+        isTransitioning && direction >= 0,
       );
       this.elements.slideContainer.classList.toggle(
         "is-backward",
-        isTransitioning && direction < 0
+        isTransitioning && direction < 0,
       );
     },
 
     updatePhotoInfo(photo, index, total) {
-      const title =
-        typeof photo.title === "string"
-          ? photo.title
-          : photo.title?._content || "Untitled";
+      const title = getPhotoTitle(photo);
       const ownerId = photo.owner || Config.userId;
-      const photoUrl = `https://www.flickr.com/photos/${ownerId}/${photo.id}`;
+      const photoUrl = `https://www.flickr.com/photos/${encodeURIComponent(
+        ownerId,
+      )}/${encodeURIComponent(photo.id)}`;
       const description = photo.description?._content?.trim() || "";
       const hasLocation =
         photo.latitude &&
@@ -107,7 +158,7 @@
         photo.latitude !== "0" &&
         photo.longitude !== "0";
 
-      this.elements.imageTitle.textContent = title || "Untitled";
+      this.elements.imageTitle.textContent = title;
       this.elements.imageDescription.textContent = description;
       this.elements.imageLocation.textContent =
         Config.showLocation && hasLocation
@@ -122,19 +173,17 @@
       const digitCount = Math.max(2, String(total).length);
       this.elements.currentSlide.textContent = String(index + 1).padStart(
         digitCount,
-        "0"
+        "0",
       );
       this.elements.totalSlides.textContent = String(total).padStart(
         digitCount,
-        "0"
+        "0",
       );
-      this.elements.slideImg.alt = `${title || "Untitled"}, photo ${
+      this.elements.slideImg.alt = `${title}, photo ${index + 1} of ${total}`;
+      this.updateInfoToggleLabel(ImageHandler.infoExpanded);
+      this.elements.slideAnnouncer.textContent = `Now showing ${title}, photo ${
         index + 1
       } of ${total}`;
-      this.updateInfoToggleLabel(ImageHandler.infoExpanded);
-      this.elements.slideAnnouncer.textContent = `Now showing ${
-        title || "Untitled"
-      }, photo ${index + 1} of ${total}`;
     },
 
     updateInfoToggleLabel(isExpanded) {
@@ -142,7 +191,7 @@
       const action = isExpanded ? "Hide" : "Show";
       this.elements.imageInfoToggle.setAttribute(
         "aria-label",
-        `${action} photo details for ${title}`
+        `${action} photo details for ${title}`,
       );
     },
 
@@ -151,34 +200,34 @@
       this.elements.imageInfo.classList.toggle("expanded", isExpanded);
       this.elements.imageInfoToggle.setAttribute(
         "aria-expanded",
-        String(isExpanded)
+        String(isExpanded),
       );
       this.updateInfoToggleLabel(isExpanded);
       this.elements.imageDetails.setAttribute(
         "aria-hidden",
-        String(!isExpanded)
+        String(!isExpanded),
       );
       this.elements.imageDetails.inert = !isExpanded;
-      if (isExpanded) IdleUIHandler.hold();
-      else IdleUIHandler.wake();
+      if (isExpanded) IdleUIHandler.hold(PauseReason.infoExpanded);
+      else IdleUIHandler.release(PauseReason.infoExpanded);
     },
 
     setPaused(isPaused) {
       this.elements.slideContainer.classList.toggle("is-paused", isPaused);
       this.elements.pauseBtn.setAttribute(
         "aria-label",
-        isPaused ? "Resume carousel" : "Pause carousel"
+        isPaused ? "Resume carousel" : "Pause carousel",
       );
       this.elements.slideAnnouncer.setAttribute(
         "aria-live",
-        isPaused ? "polite" : "off"
+        isPaused ? "polite" : "off",
       );
     },
 
     setSoundMuted(isMuted) {
       this.elements.soundToggleBtn.setAttribute(
         "aria-pressed",
-        String(!isMuted)
+        String(!isMuted),
       );
     },
 
@@ -186,6 +235,10 @@
       this.elements.slideContainer.classList.remove("progress-running");
       void this.elements.progressFill.offsetWidth;
       this.elements.slideContainer.classList.add("progress-running");
+    },
+
+    stopProgress() {
+      this.elements.slideContainer.classList.remove("progress-running");
     },
 
     setFitMode(shouldFill) {
@@ -196,11 +249,11 @@
     setFullscreen(isFullscreen) {
       this.elements.slideContainer.classList.toggle(
         "is-fullscreen",
-        isFullscreen
+        isFullscreen,
       );
       this.elements.fullscreenBtn.setAttribute(
         "aria-label",
-        isFullscreen ? "Exit fullscreen" : "Enter fullscreen"
+        isFullscreen ? "Exit fullscreen" : "Enter fullscreen",
       );
     },
   };
@@ -259,7 +312,7 @@
 
       try {
         this.activeSource.stop();
-      } catch (_error) {
+      } catch {
         // The source may already have reached its natural end.
       }
       this.activeSource = null;
@@ -278,7 +331,7 @@
         UI.elements.soundToggleBtn.disabled = true;
         UI.elements.soundToggleBtn.setAttribute(
           "aria-label",
-          "Carousel sound is not supported"
+          "Carousel sound is not supported",
         );
         return;
       }
@@ -294,7 +347,7 @@
         UI.elements.soundToggleBtn.disabled = true;
         UI.elements.soundToggleBtn.setAttribute(
           "aria-label",
-          "Carousel sound is unavailable"
+          "Carousel sound is unavailable",
         );
         console.error("Carousel: Unable to enable sound", error);
       }
@@ -331,8 +384,17 @@
 
   const FlickrAPI = {
     async fetchPhotos() {
+      const controller = new AbortController();
+      const timeout = window.setTimeout(
+        () => controller.abort(),
+        API_REQUEST_TIMEOUT,
+      );
+
       try {
-        const response = await fetch(Config.flickrApiUrl, { cache: "default" });
+        const response = await fetch(Config.flickrApiUrl, {
+          cache: "default",
+          signal: controller.signal,
+        });
 
         if (!response.ok) {
           throw new Error(`Photo service returned ${response.status}`);
@@ -343,11 +405,16 @@
         if (!data.success) {
           throw new Error(data.message || "Unknown error fetching photos");
         }
+        if (!Array.isArray(data.photos)) {
+          throw new TypeError("Photo service returned an invalid photo list");
+        }
 
         return data.photos;
       } catch (error) {
         console.error("Carousel: Error fetching images", error);
         return [];
+      } finally {
+        window.clearTimeout(timeout);
       }
     },
   };
@@ -359,21 +426,18 @@
     failedPhotoIndexes: new Set(),
     infoExpanded: false,
 
+    get availablePhotoCount() {
+      return this.photos.length - this.failedPhotoIndexes.size;
+    },
+
     getBestImageUrl(photo) {
+      if (!photo) return null;
+
       const displayWidth =
         Math.max(window.innerWidth, window.innerHeight) *
         Math.min(window.devicePixelRatio || 1, 2);
-      const sizeOptions = [
-        { suffix: "6k", minWidth: 5120 },
-        { suffix: "5k", minWidth: 4096 },
-        { suffix: "4k", minWidth: 3072 },
-        { suffix: "3k", minWidth: 2048 },
-        { suffix: "k", minWidth: 1600 },
-        { suffix: "h", minWidth: 1024 },
-        { suffix: "b", minWidth: 0 },
-      ];
 
-      for (const option of sizeOptions) {
+      for (const option of IMAGE_SIZE_OPTIONS) {
         const imageUrl = photo[`url_${option.suffix}`];
         if (imageUrl && displayWidth >= option.minWidth) return imageUrl;
       }
@@ -396,27 +460,38 @@
     },
 
     preloadImage(index) {
-      if (index < 0 || index >= this.photos.length) return Promise.resolve(null);
+      if (index < 0 || index >= this.photos.length)
+        return Promise.resolve(null);
 
       const imageUrl = this.getBestImageUrl(this.photos[index]);
       if (!imageUrl) return Promise.resolve(null);
       if (this.preloadedImages.has(imageUrl)) {
-        return this.preloadedImages.get(imageUrl).promise;
+        return this.preloadedImages.get(imageUrl);
       }
 
       const image = new Image();
-      const promise = new Promise((resolve, reject) => {
+      const loadPromise = new Promise((resolve, reject) => {
         image.addEventListener("load", () => resolve(image), { once: true });
         image.addEventListener(
           "error",
           () => reject(new Error(`Unable to load ${imageUrl}`)),
-          { once: true }
+          { once: true },
         );
       });
+      const promise = loadPromise.catch((error) => {
+        this.preloadedImages.delete(imageUrl);
+        throw error;
+      });
 
-      this.preloadedImages.set(imageUrl, { image, promise });
+      this.preloadedImages.set(imageUrl, promise);
       image.src = imageUrl;
       return promise;
+    },
+
+    preloadAdjacent(index, direction = 1) {
+      const adjacentIndex = this.findNextAvailableIndex(index, direction);
+      if (adjacentIndex === null) return;
+      this.preloadImage(adjacentIndex).catch(() => {});
     },
 
     setInfoExpanded(isExpanded) {
@@ -425,8 +500,12 @@
 
       this.infoExpanded = isExpanded;
       UI.toggleInfoExpanded(this.infoExpanded);
-      if (this.infoExpanded) Carousel.pauseForInteraction("info-expanded");
-      else Carousel.resume("info-expanded");
+      if (this.infoExpanded) {
+        Carousel.pauseForInteraction(PauseReason.infoExpanded);
+      } else {
+        Carousel.resume(PauseReason.infoExpanded);
+        Carousel.clearInteractionPauseOverride(PauseReason.infoExpanded);
+      }
     },
 
     toggleInfoDetails() {
@@ -436,15 +515,15 @@
     async initializePhotos() {
       const allPhotos = await FlickrAPI.fetchPhotos();
       this.photos = allPhotos.filter((photo) => this.getBestImageUrl(photo));
+      this.preloadedImages.clear();
       this.failedPhotoIndexes.clear();
 
       if (Config.randomOrder) this.photos = this.shuffleArray(this.photos);
-      console.log(`Carousel: ${this.photos.length} photos loaded`);
       return this.photos.length > 0;
     },
 
     findNextAvailableIndex(fromIndex, direction) {
-      for (let offset = 1; offset <= this.photos.length; offset += 1) {
+      for (let offset = 1; offset < this.photos.length; offset += 1) {
         const index =
           (fromIndex + direction * offset + this.photos.length) %
           this.photos.length;
@@ -464,20 +543,20 @@
     activeDirection: null,
     queuedDirection: null,
     transitionToken: 0,
-    userRequestedRotation: false,
+    interactionPauseOverrides: new Set(),
 
     get isPaused() {
       return this.pauseReasons.size > 0;
     },
 
     clearTimer() {
-      if (this.timer) window.clearTimeout(this.timer);
+      if (this.timer !== null) window.clearTimeout(this.timer);
       this.timer = null;
       this.timerStartedAt = null;
     },
 
     pauseTimer() {
-      if (this.timer && this.timerStartedAt !== null) {
+      if (this.timer !== null && this.timerStartedAt !== null) {
         const elapsed = window.performance.now() - this.timerStartedAt;
         this.remainingTime = Math.max(0, this.remainingTime - elapsed);
       }
@@ -486,7 +565,7 @@
 
     startTimer() {
       this.clearTimer();
-      if (this.isPaused || ImageHandler.photos.length < 2) return;
+      if (this.isPaused || ImageHandler.availablePhotoCount < 2) return;
 
       this.timerStartedAt = window.performance.now();
       this.timer = window.setTimeout(() => {
@@ -500,8 +579,33 @@
     scheduleNext() {
       this.clearTimer();
       this.remainingTime = Config.interval;
+      if (ImageHandler.availablePhotoCount < 2) {
+        UI.stopProgress();
+        return;
+      }
       UI.restartProgress();
       this.startTimer();
+    },
+
+    recoverFromFailedPhoto(index, options) {
+      const { direction, immediate } = options;
+      ImageHandler.failedPhotoIndexes.add(index);
+      const nextIndex = ImageHandler.findNextAvailableIndex(index, direction);
+
+      if (
+        nextIndex === ImageHandler.currentPhotoIndex &&
+        UI.elements.slideImg.hasAttribute("src")
+      ) {
+        this.scheduleNext();
+        return Promise.resolve(nextIndex);
+      }
+
+      if (nextIndex === null) {
+        UI.showError("Unable to load the tray");
+        return Promise.resolve(null);
+      }
+
+      return this.showPhoto(nextIndex, { direction, immediate });
     },
 
     async showPhoto(index, options = {}) {
@@ -511,45 +615,39 @@
       const token = ++this.transitionToken;
 
       if (!imageUrl) {
-        ImageHandler.failedPhotoIndexes.add(index);
-        const nextIndex = ImageHandler.findNextAvailableIndex(index, direction);
-        if (nextIndex === null) UI.showError("Unable to load the tray");
-        else this.showPhoto(nextIndex, { direction });
-        return;
+        return this.recoverFromFailedPhoto(index, { direction, immediate });
       }
 
       this.clearTimer();
+      let loadedImage;
 
       try {
-        await ImageHandler.preloadImage(index);
+        loadedImage = await ImageHandler.preloadImage(index);
+        if (!loadedImage)
+          throw new Error(`No image available for photo ${index}`);
       } catch (error) {
         console.error(`Carousel: Failed to preload photo ${index}`, error);
-        ImageHandler.failedPhotoIndexes.add(index);
         if (token === this.transitionToken) {
-          const nextIndex = ImageHandler.findNextAvailableIndex(index, direction);
-          if (nextIndex === null) UI.showError("Unable to load the tray");
-          else this.showPhoto(nextIndex, { direction });
+          return this.recoverFromFailedPhoto(index, { direction, immediate });
         }
-        return;
+        return null;
       }
 
-      if (token !== this.transitionToken) return;
+      if (token !== this.transitionToken) return null;
 
       if (immediate || URLParamsHandler.params.disableTransitions) {
-        UI.elements.slideImg.src = imageUrl;
+        UI.setSlideSource(UI.elements.slideImg, loadedImage.src);
         UI.updatePhotoInfo(photo, index, ImageHandler.photos.length);
         ImageHandler.currentPhotoIndex = index;
         UI.hideLoading();
-        ImageHandler.preloadImage(
-          (index + 1) % ImageHandler.photos.length
-        ).catch(() => {});
+        ImageHandler.preloadAdjacent(index);
         this.scheduleNext();
-        return;
+        return index;
       }
 
       this.isTransitioning = true;
       this.activeDirection = direction;
-      UI.elements.nextSlideImg.src = imageUrl;
+      UI.setSlideSource(UI.elements.nextSlideImg, loadedImage.src);
       UI.elements.nextSlideImg.alt = "";
       UI.setTransitionState(true, direction);
       SoundHandler.playTransition(direction);
@@ -558,35 +656,32 @@
       const midpoint = Math.round(duration * 0.5);
       await wait(midpoint);
 
-      if (token !== this.transitionToken) return;
+      if (token !== this.transitionToken) return null;
       UI.updatePhotoInfo(photo, index, ImageHandler.photos.length);
       await wait(duration - midpoint + 30);
 
-      if (token !== this.transitionToken) return;
-      UI.elements.slideImg.src = imageUrl;
-      UI.elements.nextSlideImg.removeAttribute("src");
+      if (token !== this.transitionToken) return null;
+      UI.setSlideSource(UI.elements.slideImg, UI.elements.nextSlideImg.src);
+      UI.clearSlideSource(UI.elements.nextSlideImg);
       UI.setTransitionState(false);
       ImageHandler.currentPhotoIndex = index;
       this.isTransitioning = false;
       this.activeDirection = null;
 
-      ImageHandler.preloadImage(
-        (index + direction + ImageHandler.photos.length) %
-          ImageHandler.photos.length
-      ).catch(() => {});
+      ImageHandler.preloadAdjacent(index, direction);
 
       if (this.queuedDirection !== null) {
         const queuedDirection = this.queuedDirection;
         this.queuedDirection = null;
-        this.navigate(queuedDirection);
-        return;
+        return this.navigate(queuedDirection);
       }
 
       this.scheduleNext();
+      return index;
     },
 
     navigate(direction) {
-      if (ImageHandler.photos.length < 2) return;
+      if (ImageHandler.availablePhotoCount < 2) return;
 
       if (this.isTransitioning) {
         if (direction !== this.activeDirection) {
@@ -597,13 +692,13 @@
 
       const targetIndex = ImageHandler.findNextAvailableIndex(
         ImageHandler.currentPhotoIndex,
-        direction
+        direction,
       );
       if (targetIndex === null) return;
-      this.showPhoto(targetIndex, { direction });
+      return this.showPhoto(targetIndex, { direction });
     },
 
-    pause(reason = "manual") {
+    pause(reason = PauseReason.manual) {
       const wasPaused = this.isPaused;
       this.pauseReasons.add(reason);
       if (!wasPaused) {
@@ -613,11 +708,15 @@
     },
 
     pauseForInteraction(reason) {
-      if (this.userRequestedRotation) return;
+      if (this.interactionPauseOverrides.has(reason)) return;
       this.pause(reason);
     },
 
-    resume(reason = "manual") {
+    clearInteractionPauseOverride(reason) {
+      this.interactionPauseOverrides.delete(reason);
+    },
+
+    resume(reason = PauseReason.manual) {
       const hadReason = this.pauseReasons.delete(reason);
       if (!hadReason) return;
       if (this.isPaused) return;
@@ -629,13 +728,19 @@
       if (URLParamsHandler.params.hideInfo) return;
 
       if (!this.isPaused) {
-        this.userRequestedRotation = false;
-        this.pause("manual");
+        this.interactionPauseOverrides.clear();
+        this.pause(PauseReason.manual);
         return;
       }
 
+      const activeInteractionReasons = [...this.pauseReasons].filter((reason) =>
+        OVERRIDABLE_PAUSE_REASONS.has(reason),
+      );
       this.pauseReasons.clear();
-      this.userRequestedRotation = true;
+      this.interactionPauseOverrides.clear();
+      activeInteractionReasons.forEach((reason) =>
+        this.interactionPauseOverrides.add(reason),
+      );
       UI.setPaused(false);
       this.startTimer();
     },
@@ -660,7 +765,7 @@
   const FitModeHandler = {
     toggle() {
       UI.setFitMode(
-        !UI.elements.slideContainer.classList.contains("fill-image")
+        !UI.elements.slideContainer.classList.contains("fill-image"),
       );
     },
   };
@@ -669,7 +774,16 @@
     touchStartX: null,
     touchStartY: null,
 
+    reset() {
+      this.touchStartX = null;
+      this.touchStartY = null;
+    },
+
     handleTouchStart(event) {
+      if (event.touches.length !== 1) {
+        this.reset();
+        return;
+      }
       this.touchStartX = event.touches[0].clientX;
       this.touchStartY = event.touches[0].clientY;
     },
@@ -687,8 +801,7 @@
         Carousel.navigate(differenceX > 0 ? 1 : -1);
       }
 
-      this.touchStartX = null;
-      this.touchStartY = null;
+      this.reset();
     },
   };
 
@@ -697,23 +810,25 @@
 
     init() {
       const urlParams = new URLSearchParams(window.location.search);
-      this.params.hideInfo = urlParams.has("hideInfo");
-      this.params.disableTransitions = urlParams.has("disableTransitions");
-      this.params.fillImage = urlParams.has("fillImage");
+      this.params = {
+        hideInfo: urlParams.has("hideInfo"),
+        disableTransitions: urlParams.has("disableTransitions"),
+        fillImage: urlParams.has("fillImage"),
+      };
       this.applyParams();
     },
 
     applyParams() {
       UI.elements.slideContainer.classList.toggle(
         "ui-hidden",
-        this.params.hideInfo
+        this.params.hideInfo,
       );
       UI.elements.slideContainer.classList.toggle(
         "transitions-disabled",
-        this.params.disableTransitions
+        this.params.disableTransitions,
       );
       UI.setFitMode(this.params.fillImage);
-      if (this.params.hideInfo) Carousel.pause("hidden-ui");
+      if (this.params.hideInfo) Carousel.pause(PauseReason.hiddenUI);
     },
   };
 
@@ -721,16 +836,15 @@
     delay: 2400,
     timer: null,
     pointerFrame: null,
+    holdReasons: new Set(),
 
     clearTimer() {
-      if (this.timer) window.clearTimeout(this.timer);
+      if (this.timer !== null) window.clearTimeout(this.timer);
       this.timer = null;
     },
 
     hasVisibleFocus() {
-      if (
-        !UI.elements.slideContainer.classList.contains("is-keyboard-input")
-      ) {
+      if (!UI.elements.slideContainer.classList.contains("is-keyboard-input")) {
         return false;
       }
 
@@ -743,10 +857,10 @@
 
     schedule() {
       this.clearTimer();
-      if (URLParamsHandler.params.hideInfo || ImageHandler.infoExpanded) return;
+      if (URLParamsHandler.params.hideInfo || this.holdReasons.size > 0) return;
 
       this.timer = window.setTimeout(() => {
-        if (this.hasVisibleFocus() || ImageHandler.infoExpanded) return;
+        if (this.hasVisibleFocus() || this.holdReasons.size > 0) return;
         UI.elements.slideContainer.classList.add("is-ui-idle");
       }, this.delay);
     },
@@ -756,13 +870,19 @@
       this.schedule();
     },
 
-    hold() {
+    hold(reason) {
+      this.holdReasons.add(reason);
       this.clearTimer();
       UI.elements.slideContainer.classList.remove("is-ui-idle");
     },
 
+    release(reason) {
+      this.holdReasons.delete(reason);
+      this.wake();
+    },
+
     handlePointerActivity() {
-      if (this.pointerFrame) return;
+      if (this.pointerFrame !== null) return;
       this.pointerFrame = window.requestAnimationFrame(() => {
         this.pointerFrame = null;
         this.wake();
@@ -772,145 +892,240 @@
 
   const EventHandlers = {
     resizeTimer: null,
+    resizeRequest: 0,
+    focusFrame: null,
+    temporaryResumeTimers: new Map(),
     usingKeyboard: false,
 
+    cancelTemporaryResume(reason) {
+      const timer = this.temporaryResumeTimers.get(reason);
+      if (timer === undefined) return;
+
+      window.clearTimeout(timer);
+      this.temporaryResumeTimers.delete(reason);
+    },
+
+    scheduleTemporaryResume(reason) {
+      this.cancelTemporaryResume(reason);
+      const timer = window.setTimeout(() => {
+        this.temporaryResumeTimers.delete(reason);
+        Carousel.resume(reason);
+        Carousel.clearInteractionPauseOverride(reason);
+        IdleUIHandler.release(reason);
+      }, POINTER_HANDOFF_DELAY);
+      this.temporaryResumeTimers.set(reason, timer);
+    },
+
+    bindTemporaryPause(element, reason) {
+      element.addEventListener("pointerenter", () => {
+        this.cancelTemporaryResume(reason);
+        element.classList.add("is-pointer-active");
+        IdleUIHandler.hold(reason);
+        Carousel.pauseForInteraction(reason);
+      });
+      element.addEventListener("pointerleave", () => {
+        element.classList.remove("is-pointer-active");
+        this.scheduleTemporaryResume(reason);
+      });
+    },
+
+    setKeyboardInput() {
+      this.usingKeyboard = true;
+      UI.elements.slideContainer.classList.add("is-keyboard-input");
+      IdleUIHandler.wake();
+      this.queueFocusUpdate();
+    },
+
+    setPointerInput() {
+      this.usingKeyboard = false;
+      UI.elements.slideContainer.classList.remove("is-keyboard-input");
+      Carousel.clearInteractionPauseOverride(PauseReason.focus);
+      IdleUIHandler.release(PauseReason.focus);
+    },
+
+    queueFocusUpdate() {
+      if (this.focusFrame !== null) {
+        window.cancelAnimationFrame(this.focusFrame);
+      }
+      this.focusFrame = window.requestAnimationFrame(() => {
+        this.focusFrame = null;
+        this.syncFocusState();
+      });
+    },
+
+    syncFocusState() {
+      const activeElement = document.activeElement;
+      const hasVisibleCarouselFocus =
+        this.usingKeyboard &&
+        activeElement instanceof HTMLElement &&
+        UI.elements.slideContainer.contains(activeElement) &&
+        activeElement.matches(":focus-visible");
+
+      if (hasVisibleCarouselFocus) {
+        Carousel.pauseForInteraction(PauseReason.focus);
+        IdleUIHandler.hold(PauseReason.focus);
+      } else {
+        Carousel.clearInteractionPauseOverride(PauseReason.focus);
+        IdleUIHandler.release(PauseReason.focus);
+      }
+    },
+
+    handlePointerDown() {
+      this.setPointerInput();
+    },
+
+    handleDocumentClick(event) {
+      if (
+        !ImageHandler.infoExpanded ||
+        !(event.target instanceof Node) ||
+        UI.elements.imageInfo.contains(event.target)
+      ) {
+        return;
+      }
+
+      ImageHandler.setInfoExpanded(false);
+      if (document.activeElement === UI.elements.imageInfoToggle) {
+        UI.elements.imageInfoToggle.blur();
+      }
+    },
+
     setupEventListeners() {
+      [UI.elements.slideImg, UI.elements.nextSlideImg].forEach((image) => {
+        image.addEventListener("error", () => UI.handleSlideImageError(image));
+      });
+
       UI.elements.previousBtn.addEventListener("click", () =>
-        Carousel.navigate(-1)
+        Carousel.navigate(-1),
       );
-      UI.elements.nextBtn.addEventListener("click", () =>
-        Carousel.navigate(1)
-      );
+      UI.elements.nextBtn.addEventListener("click", () => Carousel.navigate(1));
       UI.elements.pauseBtn.addEventListener("click", () =>
-        Carousel.togglePause()
+        Carousel.togglePause(),
       );
       UI.elements.soundToggleBtn.addEventListener("click", () =>
-        SoundHandler.toggle()
+        SoundHandler.toggle(),
       );
       UI.elements.fullscreenBtn.addEventListener("click", () =>
-        FullscreenHandler.toggle()
+        FullscreenHandler.toggle(),
       );
       UI.elements.fitModeBtn.addEventListener("click", () =>
-        FitModeHandler.toggle()
+        FitModeHandler.toggle(),
       );
 
       if (!URLParamsHandler.params.hideInfo) {
         UI.elements.imageInfoToggle.addEventListener("click", () =>
-          ImageHandler.toggleInfoDetails()
+          ImageHandler.toggleInfoDetails(),
         );
-        UI.elements.imageInfo.addEventListener("mouseenter", () => {
-          IdleUIHandler.hold();
-          Carousel.pauseForInteraction("info-hover");
-        });
-        UI.elements.imageInfo.addEventListener("mouseleave", () => {
-          Carousel.resume("info-hover");
-          IdleUIHandler.wake();
-        });
+        this.bindTemporaryPause(UI.elements.imageInfo, PauseReason.infoHover);
       }
 
-      UI.elements.carouselControls.addEventListener("pointerenter", () => {
-        IdleUIHandler.hold();
-        Carousel.pauseForInteraction("controls-hover");
-      });
-      UI.elements.carouselControls.addEventListener("pointerleave", () => {
-        Carousel.resume("controls-hover");
-        IdleUIHandler.wake();
-      });
+      this.bindTemporaryPause(
+        UI.elements.carouselControls,
+        PauseReason.controlsHover,
+      );
       [UI.elements.previousBtn, UI.elements.nextBtn].forEach((button) => {
-        button.addEventListener("pointerenter", () => {
-          IdleUIHandler.hold();
-          Carousel.pauseForInteraction("edge-hover");
-        });
-        button.addEventListener("pointerleave", () => {
-          Carousel.resume("edge-hover");
-          IdleUIHandler.wake();
-        });
+        this.bindTemporaryPause(button, PauseReason.edgeHover);
       });
 
-      UI.elements.slideContainer.addEventListener("touchstart", (event) => {
-        IdleUIHandler.wake();
-        Carousel.pauseForInteraction("touch");
-        SwipeHandler.handleTouchStart(event);
-      });
-      UI.elements.slideContainer.addEventListener("touchend", (event) =>
-        SwipeHandler.handleTouchEnd(event)
+      UI.elements.slideContainer.addEventListener(
+        "touchstart",
+        (event) => {
+          IdleUIHandler.hold(PauseReason.touch);
+          Carousel.pauseForInteraction(PauseReason.touch);
+          SwipeHandler.handleTouchStart(event);
+        },
+        { passive: true },
       );
-      document.addEventListener("keydown", (event) =>
-        this.handleKeyPress(event)
+      UI.elements.slideContainer.addEventListener(
+        "touchend",
+        (event) => {
+          SwipeHandler.handleTouchEnd(event);
+          Carousel.resume(PauseReason.touch);
+          Carousel.clearInteractionPauseOverride(PauseReason.touch);
+          IdleUIHandler.release(PauseReason.touch);
+        },
+        { passive: true },
+      );
+      UI.elements.slideContainer.addEventListener(
+        "touchcancel",
+        () => {
+          SwipeHandler.reset();
+          Carousel.resume(PauseReason.touch);
+          Carousel.clearInteractionPauseOverride(PauseReason.touch);
+          IdleUIHandler.release(PauseReason.touch);
+        },
+        { passive: true },
+      );
+      document.addEventListener(
+        "keydown",
+        (event) => {
+          this.setKeyboardInput();
+          this.handleKeyPress(event);
+        },
+        { capture: true },
       );
       document.addEventListener(
         "pointermove",
         () => IdleUIHandler.handlePointerActivity(),
-        { passive: true }
+        { passive: true },
       );
-      document.addEventListener(
-        "pointerdown",
-        (event) => {
-          this.usingKeyboard = false;
-          UI.elements.slideContainer.classList.remove("is-keyboard-input");
-
-          if (
-            !ImageHandler.infoExpanded ||
-            !(event.target instanceof Node) ||
-            UI.elements.imageInfo.contains(event.target)
-          ) {
-            return;
-          }
-
-          ImageHandler.setInfoExpanded(false);
-          if (document.activeElement === UI.elements.imageInfoToggle) {
-            UI.elements.imageInfoToggle.blur();
-          }
-        },
-        { capture: true }
-      );
-      document.addEventListener("focusin", (event) => {
-        if (
-          this.usingKeyboard &&
-          UI.elements.slideContainer.contains(event.target)
-        ) {
-          Carousel.pauseForInteraction("focus");
-        }
-        window.requestAnimationFrame(() => {
-          if (IdleUIHandler.hasVisibleFocus()) IdleUIHandler.hold();
-          else IdleUIHandler.wake();
-        });
+      document.addEventListener("pointerdown", () => this.handlePointerDown(), {
+        capture: true,
       });
-      document.addEventListener("focusout", () => IdleUIHandler.wake());
-      document.addEventListener(
-        "keydown",
-        () => {
-          this.usingKeyboard = true;
-          UI.elements.slideContainer.classList.add("is-keyboard-input");
-          IdleUIHandler.wake();
-        },
-        { capture: true }
+      document.addEventListener("click", (event) =>
+        this.handleDocumentClick(event),
       );
+      document.addEventListener("focusin", () => this.queueFocusUpdate());
+      document.addEventListener("focusout", () => this.queueFocusUpdate());
       document.addEventListener("fullscreenchange", () =>
-        UI.setFullscreen(Boolean(document.fullscreenElement))
+        UI.setFullscreen(Boolean(document.fullscreenElement)),
       );
       document.addEventListener("visibilitychange", () => {
-        if (document.hidden) Carousel.pause("visibility");
-        else Carousel.resume("visibility");
+        if (document.hidden) Carousel.pause(PauseReason.visibility);
+        else Carousel.resume(PauseReason.visibility);
       });
       window.addEventListener("resize", () => this.handleResize());
     },
 
     handleKeyPress(event) {
+      if (event.altKey && !event.ctrlKey && !event.metaKey) {
+        switch (event.code) {
+          case "KeyF":
+            event.preventDefault();
+            FullscreenHandler.toggle();
+            return;
+          case "KeyM":
+            event.preventDefault();
+            FitModeHandler.toggle();
+            return;
+          case "KeyS":
+            event.preventDefault();
+            SoundHandler.toggle();
+            return;
+          case "KeyI":
+            event.preventDefault();
+            if (!URLParamsHandler.params.hideInfo) {
+              ImageHandler.toggleInfoDetails();
+            }
+            return;
+        }
+      }
+
       if (
-        event.target instanceof HTMLAnchorElement ||
-        event.target instanceof HTMLButtonElement
+        event.target instanceof Element &&
+        event.target.closest(
+          "a, button, input, select, textarea, [contenteditable='true']",
+        )
       ) {
         return;
       }
 
       switch (event.key) {
         case "ArrowRight":
-          Carousel.pauseForInteraction("keyboard-navigation");
+          event.preventDefault();
           Carousel.navigate(1);
           return;
         case "ArrowLeft":
-          Carousel.pauseForInteraction("keyboard-navigation");
+          event.preventDefault();
           Carousel.navigate(-1);
           return;
         case " ":
@@ -918,46 +1133,33 @@
           Carousel.togglePause();
           return;
       }
-
-      if (!event.altKey || event.ctrlKey || event.metaKey) return;
-
-      switch (event.code) {
-        case "KeyF":
-          event.preventDefault();
-          FullscreenHandler.toggle();
-          break;
-        case "KeyM":
-          event.preventDefault();
-          FitModeHandler.toggle();
-          break;
-        case "KeyS":
-          event.preventDefault();
-          SoundHandler.toggle();
-          break;
-        case "KeyI":
-          event.preventDefault();
-          if (!URLParamsHandler.params.hideInfo) {
-            ImageHandler.toggleInfoDetails();
-          }
-          break;
-      }
     },
 
     handleResize() {
       window.clearTimeout(this.resizeTimer);
+      const request = ++this.resizeRequest;
       this.resizeTimer = window.setTimeout(async () => {
-        const currentPhoto =
-          ImageHandler.photos[ImageHandler.currentPhotoIndex];
+        this.resizeTimer = null;
+        const photoIndex = ImageHandler.currentPhotoIndex;
+        const currentPhoto = ImageHandler.photos[photoIndex];
         if (!currentPhoto) return;
 
         const imageUrl = ImageHandler.getBestImageUrl(currentPhoto);
-        if (imageUrl && imageUrl !== UI.elements.slideImg.src) {
-          try {
-            await ImageHandler.preloadImage(ImageHandler.currentPhotoIndex);
-            UI.elements.slideImg.src = imageUrl;
-          } catch (error) {
-            console.error("Carousel: Resize image update failed", error);
+        if (!imageUrl) return;
+        const absoluteImageUrl = new URL(imageUrl, document.baseURI).href;
+        if (absoluteImageUrl === UI.elements.slideImg.src) return;
+
+        try {
+          const loadedImage = await ImageHandler.preloadImage(photoIndex);
+          if (
+            request === this.resizeRequest &&
+            photoIndex === ImageHandler.currentPhotoIndex &&
+            loadedImage
+          ) {
+            UI.setSlideSource(UI.elements.slideImg, loadedImage.src);
           }
+        } catch (error) {
+          console.error("Carousel: Resize image update failed", error);
         }
       }, 180);
     },
@@ -967,11 +1169,11 @@
     UI.showLoading();
     document.documentElement.style.setProperty(
       "--progress-duration",
-      `${Config.interval}ms`
+      `${Config.interval}ms`,
     );
     URLParamsHandler.init();
     if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) {
-      Carousel.pause("reduced-motion");
+      Carousel.pause(PauseReason.reducedMotion);
     }
     UI.setSoundMuted(true);
     EventHandlers.setupEventListeners();
@@ -980,7 +1182,6 @@
       const hasPhotos = await ImageHandler.initializePhotos();
       if (!hasPhotos) throw new Error("No photos available to display");
 
-      await ImageHandler.preloadImage(0);
       await Carousel.showPhoto(0, { immediate: true });
     } catch (error) {
       console.error("Carousel: Initialization error", error);
