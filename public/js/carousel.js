@@ -36,7 +36,7 @@
     randomOrder: true,
     showPhotographer: true,
     showLocation: true,
-    flickrApiUrl: "/flickr-api-proxy/",
+    flickrApiUrl: "/flickr-api-proxy/v1",
   });
 
   const wait = (duration) =>
@@ -46,6 +46,14 @@
     const title =
       typeof photo.title === "string" ? photo.title : photo.title?._content;
     return title?.trim() || "Untitled";
+  };
+
+  const getFlickrPhotoUrl = (photo) => {
+    if (!photo?.owner || !photo?.id) return null;
+
+    return `https://www.flickr.com/photos/${encodeURIComponent(
+      photo.owner,
+    )}/${encodeURIComponent(photo.id)}`;
   };
 
   const UI = {
@@ -146,10 +154,7 @@
 
     updatePhotoInfo(photo, index, total) {
       const title = getPhotoTitle(photo);
-      const ownerId = photo.owner;
-      const photoUrl = `https://www.flickr.com/photos/${encodeURIComponent(
-        ownerId,
-      )}/${encodeURIComponent(photo.id)}`;
+      const photoUrl = getFlickrPhotoUrl(photo);
       const description = photo.description?._content?.trim() || "";
       const hasLocation =
         photo.latitude &&
@@ -167,7 +172,12 @@
         Config.showPhotographer && photo.ownername
           ? `Photograph by ${photo.ownername}`
           : "";
-      this.elements.flickrLink.href = photoUrl;
+      this.elements.flickrLink.hidden = !photoUrl;
+      if (photoUrl) {
+        this.elements.flickrLink.href = photoUrl;
+      } else {
+        this.elements.flickrLink.removeAttribute("href");
+      }
 
       const digitCount = Math.max(2, String(total).length);
       this.elements.currentSlide.textContent = String(index + 1).padStart(
@@ -408,7 +418,10 @@
           throw new TypeError("Photo service returned an invalid photo list");
         }
 
-        return data.photos;
+        return data.photos.map((photo) => ({
+          ...photo,
+          owner: photo.owner || data.owner,
+        }));
       } catch (error) {
         console.error("Carousel: Error fetching images", error);
         return [];

@@ -480,6 +480,10 @@ button {
   text-transform: uppercase;
 }
 
+#flickr-link[hidden] {
+  display: none;
+}
+
 #flickr-link:hover {
   color: #fff;
 }

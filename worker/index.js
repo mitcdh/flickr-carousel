@@ -76,7 +76,12 @@ async function handlePhotoRequest(request, env) {
   }));
 
   return jsonResponse(
-    { success: true, photos: photosWithOwners, message: "" },
+    {
+      success: true,
+      owner: ownerId,
+      photos: photosWithOwners,
+      message: "",
+    },
     { cacheControl: SUCCESS_CACHE_CONTROL },
   );
 }
