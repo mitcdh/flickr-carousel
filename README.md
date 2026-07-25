@@ -1,57 +1,78 @@
-# A Flickr Album Carousel (Slideshow)
+# Flickr Album Carousel
 
-This application provides a slideshow experience that displays images and descriptions from a Flickr photoset in a visually appealing way. Absolutely not maybe inspired by the Carousel pitch from Mad Men.
+A fullscreen, responsive slideshow for any public Flickr album. The application
+runs as a Cloudflare Worker so the Flickr API key stays on the server rather
+than being exposed in browser code.
 
 ## Features
 
-* Fullscreen image slideshow with automatic transitions and responsive design.
-* Optional real slide-projector transition sound, muted by default.
-* Toggle between height-priority and width-priority display modes with fullscreen support.
-* Mobile-friendly interface with swipe gestures and expandable image information.
-* Can deploy as a Cloudflare worker with static assets to keep the flickr API key secret.
+- Automatic slideshow with keyboard, pointer, and swipe navigation
+- Responsive fit and fill display modes
+- Expandable photo titles, descriptions, locations, and photographer details
+- Optional slide-projector transition sound, muted by default
+- Fullscreen and reduced-motion support
+- Server-side Flickr API proxy with daily response caching
 
-## Usage
+## Requirements
 
-### Controls
+- A public Flickr album
+- A [Flickr API key](https://www.flickr.com/services/apps/create/apply/)
+- A [Cloudflare account](https://dash.cloudflare.com/sign-up)
+- A current version of Node.js and npm
 
-- **Left/Right Arrow Keys + Swipe Left/Right**: Navigate between images.
-- **Spacebar**: Pause/resume slideshow.
-- **Alt+S/Sound Button**: Mute or unmute the projector transition sound.
-- **Alt+F**: Toggle fullscreen mode.
-- **Alt+M**: Toggle between height and width priority modes.
-- **Click on Image Info/Alt+I**: Expand/collapse image details.
+You will need these three Flickr values:
 
-## Installation
+| Variable | Value |
+| --- | --- |
+| `FLICKR_API_KEY` | Your Flickr API key |
+| `FLICKR_USER_ID` | The album owner's Flickr NSID, such as `12345678@N00` |
+| `FLICKR_PHOTOSET_ID` | The numeric album ID at the end of its `/albums/` URL |
 
-1. Clone the repository
-2. If using Cloudflare:
-    1. Update the variables in `wrangler.toml`.
-    2. Deploy as a Cloudflare worker and set `FLICKR_API_KEY` as an environment secret. You can obtain an api key [on Flickr](https://www.flickr.com/services/apps/create/apply/).
-3. If not using Cloudflare workers:
-    * Update `flickrApiUrl` in `carousel.js` to be a full flickr api url, you can find a sample in `worker/index.js` but the vars will need to be assigned.
-3. Update the personalisations in `index.html` and `/public`. Make it your own Carousel.
-4. Access the application and enjoy.
+If you do not know the owner's NSID, look it up with Flickr's
+[`flickr.people.findByUsername`](https://www.flickr.com/services/api/flickr.people.findByUsername.html)
+API method.
 
-## Development
+## Deploy to Cloudflare
 
-### Sound credit
+1. Clone this repository and enter its directory:
 
-The transition uses an edited CC0 recording of a real automatic slide advance
-by Joseph Sardin / BigSoundBank. Processing and license details are recorded in
-[`public/audio/NOTICE.md`](public/audio/NOTICE.md).
+   ```sh
+   git clone <your-repository-url>
+   cd flickr-carousel
+   ```
 
-### Local preview
+2. Authenticate Wrangler and deploy the Worker:
 
-The local preview runs through Cloudflare Wrangler so that the Flickr API proxy
-works in the same way as the deployed Worker.
+   ```sh
+   npx wrangler login
+   npx wrangler deploy
+   ```
 
-1. Copy the secret template:
+3. In the Cloudflare dashboard, open the new `flickr-carousel` Worker, then go
+   to **Settings > Variables and Secrets** and add:
+
+   - `FLICKR_API_KEY` as a secret
+   - `FLICKR_USER_ID` as a text variable
+   - `FLICKR_PHOTOSET_ID` as a text variable
+
+4. Deploy the variable changes in Cloudflare, then open the Worker URL.
+
+`keep_vars = true` is enabled in `wrangler.toml`, so later Wrangler deployments
+preserve values managed in the Cloudflare dashboard. The non-user-specific
+`FLICKR_EXTRAS` setting remains in `wrangler.toml`.
+
+## Local development
+
+The local preview also runs through Wrangler, giving it the same Flickr API
+proxy behavior as the deployed Worker.
+
+1. Copy the local configuration template:
 
    ```sh
    cp .dev.vars.example .dev.vars
    ```
 
-2. Edit `.dev.vars` and replace the placeholder with your Flickr API key.
+2. Replace all three placeholders in `.dev.vars` with your Flickr values.
    This file is ignored by Git and must not be committed.
 
 3. Start the development server:
@@ -60,15 +81,28 @@ works in the same way as the deployed Worker.
    npx wrangler dev
    ```
 
-4. Open the local URL printed by Wrangler, normally
-   `http://localhost:8787`.
+4. Open the URL printed by Wrangler, normally
+   `http://localhost:8787`. Stop the server with `Ctrl+C`.
 
-Stop the server with `Ctrl+C`.
+## Controls
 
-### Making changes
+- **Left/Right Arrow** or **Swipe Left/Right**: Previous or next photo
+- **Spacebar**: Pause or resume the slideshow
+- **Alt+S** or the sound button: Mute or unmute the transition sound
+- **Alt+F**: Toggle fullscreen mode
+- **Alt+M**: Toggle fit and fill display modes
+- **Alt+I** or the photo information: Expand or collapse photo details
 
-To modify or extend this application:
+## Customization
 
-1. Edit the CSS in `public/css/carousel.css` to change the appearance.
-2. Modify the JavaScript in `public/js/carousel.js` to alter functionality.
-3. Update the HTML structure and personalisations in `public/index.html` as needed.
+- Edit `public/index.html` to change the title, metadata, and page structure.
+- Edit `public/css/carousel.css` to change the appearance.
+- Edit the `Config` object in `public/js/carousel.js` to change the slide
+  interval, random ordering, and optional photo details.
+- Replace the icons and manifest files in `public/` to brand the installed app.
+
+## Sound credit
+
+The transition uses an edited CC0 recording of a real automatic slide advance
+by Joseph Sardin / BigSoundBank. Processing and license details are in
+[`public/audio/NOTICE.md`](public/audio/NOTICE.md).

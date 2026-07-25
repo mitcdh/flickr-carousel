@@ -36,7 +36,6 @@
     randomOrder: true,
     showPhotographer: true,
     showLocation: true,
-    userId: "83515912@N03",
     flickrApiUrl: "/flickr-api-proxy/",
   });
 
@@ -147,7 +146,7 @@
 
     updatePhotoInfo(photo, index, total) {
       const title = getPhotoTitle(photo);
-      const ownerId = photo.owner || Config.userId;
+      const ownerId = photo.owner;
       const photoUrl = `https://www.flickr.com/photos/${encodeURIComponent(
         ownerId,
       )}/${encodeURIComponent(photo.id)}`;

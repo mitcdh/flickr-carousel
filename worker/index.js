@@ -69,8 +69,14 @@ async function handlePhotoRequest(request, env) {
     throw new TypeError("Flickr returned an invalid photo list");
   }
 
+  const ownerId = data.photoset.owner || env.FLICKR_USER_ID;
+  const photosWithOwners = photos.map((photo) => ({
+    ...photo,
+    owner: photo.owner || ownerId,
+  }));
+
   return jsonResponse(
-    { success: true, photos, message: "" },
+    { success: true, photos: photosWithOwners, message: "" },
     { cacheControl: SUCCESS_CACHE_CONTROL },
   );
 }
