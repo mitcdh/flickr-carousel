@@ -11,7 +11,7 @@ than being exposed in browser code.
 - Expandable photo titles, descriptions, locations, and photographer details
 - Optional slide-projector transition sound, muted by default
 - Fullscreen and reduced-motion support
-- Server-side Flickr API proxy with daily response caching
+- Server-side Flickr API proxy with 24-hour Cloudflare edge caching
 
 ## Requirements
 
@@ -60,6 +60,11 @@ API method.
 `keep_vars = true` is enabled in `wrangler.toml`, so later Wrangler deployments
 preserve values managed in the Cloudflare dashboard. The non-user-specific
 `FLICKR_EXTRAS` setting remains in `wrangler.toml`.
+
+Workers Cache is also enabled. Successful Flickr proxy responses are cached for
+24 hours on Cloudflare's tiered edge cache, so cache hits are returned without
+executing the Worker or contacting Flickr. Static files remain asset-first and
+only the `/flickr-api-proxy/*` path is explicitly routed to the Worker first.
 
 ## Local development
 
